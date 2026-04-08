@@ -14,9 +14,7 @@
 The workflow revolves around optimization experiments. Each experiment is defined in a format similar to autoresearch and is referred to as a **seed**. From a seed, users can create **branches** — independent exploration paths. Within each branch, an agent with a distinct context and harness is initialized to iteratively evolve the codebase with the goal of improving the evaluation score. The user then oversees this multi-branch evolution, steering it toward greater efficiency and superior results.
 
 ## Quick Showcase
-<p align="center">
-  <img src="demo.gif" alt="co.research demo" width="720">
-</p>
+https://github.com/user-attachments/assets/d03f6075-7f74-4d97-a6d2-9f99d99b0d1b
 
 ## Installation
 
