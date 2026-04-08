@@ -16,7 +16,6 @@ The workflow revolves around optimization experiments. Each experiment is define
 ## Quick Showcase
 https://github.com/user-attachments/assets/d03f6075-7f74-4d97-a6d2-9f99d99b0d1b
 
-
 ## Installation
 
 ```bash
@@ -24,6 +23,16 @@ git clone {repo_url}
 cd $directory
 docker compose up
 ```
+
+## Workflow
+1. Modify your experiment to conform to coresearch [guidelines](https://github.com/qriostech/guidelines/blob/main/coresearch/guidelines/guidelines_v004.md) (try asking agent do it).
+2. Visit http://127.0.0.1:5173 , new seed and add the repository details.
+3. Create a branch or branches. Session will pop up in the left sidebar. (session is a terminal instance on a runner, right now sessions are created using tmux)
+4. Go into the session. Invoke the agent (codex and claude are pre-installed) and tell him to start the experiment and explain what to optimize. Wait, have a coffee, read a paper.
+5. Inspect metrics, visuals, diffs. 
+6. When you like something fork it. It creates a new session where you have the opportunity to let the agent continue the experiment but tweak what are trying to achieve.
+7. When something looks really good remember to test it out of sample if you are optimizing a problem where it is relevant. 
+8. Push it to version control.
 
 ## Troubleshooting
 ```bash
@@ -44,10 +53,6 @@ docker compose down -v && docker compose build --no-cache && docker compose up -
 | **Branch** | Independent exploration path |
 | **Session** | A working period within a branch |
 | **Iteration** | A single evolution step |
-
-## How to Achieve Results
-
-
 
 ## Special Thanks
 
