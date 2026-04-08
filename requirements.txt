@@ -1,0 +1,9 @@
+pydantic
+psycopg2-binary
+python-dotenv
+pytest
+fastapi
+uvicorn[standard]
+httpx
+watchdog
+websockets

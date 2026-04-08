@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: coresearch
+      POSTGRES_PASSWORD: coresearch
+      POSTGRES_DB: coresearch
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./storage_definition.sql:/docker-entrypoint-initdb.d/storage_definition.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coresearch"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  runner:
+    build:
+      context: .
+      dockerfile: coresearch-core/runner/Dockerfile
+    ports:
+      - "8001:8001"
+      - "1455:1455"
+    environment:
+      CONTROLPLANE_URL: http://controlplane:8000
+      RUNNER_NAME: runner-1
+      RUNNER_URL: http://runner:8001
+      STORAGE_ROOT: /data/sessions
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    volumes:
+      - ${SESSION_ROOT:-~/.coresearch/sessions}:/data/sessions
+      - ${DATA_ROOT:-~/.coresearch/data}:/data/data
+      - ./coresearch-core/runner:/app/runner
+      - ./coresearch-core/shared:/app/shared
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - controlplane
+
+  controlplane:
+    build:
+      context: .
+      dockerfile: coresearch-core/controlplane/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: coresearch
+      POSTGRES_USER: coresearch
+      POSTGRES_PASSWORD: coresearch
+      RUNNER_URL: http://runner:8001
+    volumes:
+      - ./coresearch-core/controlplane:/app/controlplane
+      - ./coresearch-core/connections:/app/connections
+      - ./coresearch-core/shared:/app/shared
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/internal/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./coresearch-front
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      API_HOST: controlplane:8000
+    volumes:
+      - ./coresearch-front/src:/app/src
+    depends_on:
+      - controlplane
+      - runner
+
+volumes:
+  postgres_data:

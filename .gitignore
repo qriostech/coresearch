@@ -1,0 +1,21 @@
+*.pyc
+__pycache__/
+examle/
+.DS_Store
+
+# frontend
+coresearch-front/node_modules/
+coresearch-front/dist/
+
+# python
+*.egg-info/
+.venv/
+.env
+dist/
+build/
+
+# pytest
+coresearch-core/.pytest_cache/
+ShowCase.mp4
+
+.devcointainer/

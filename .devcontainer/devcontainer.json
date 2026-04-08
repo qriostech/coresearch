@@ -1,0 +1,32 @@
+{
+  "name": "blackgolem",
+  "image": "mcr.microsoft.com/devcontainers/python:3.13",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--security-opt",
+    "seccomp=unconfined",
+    "--add-host=host.docker.internal:host-gateway"
+  ],
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y strace ltrace procps lsof iproute2 less && pip install --upgrade pip && pip install -r requirements.txt && npm install -g @anthropic-ai/claude-code && grep -qxF 'alias claude=\"claude --dangerously-skip-permissions\"' ~/.bashrc || echo 'alias claude=\"claude --dangerously-skip-permissions\"' >> ~/.bashrc",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "ms-vscode.cpptools"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+  "remoteEnv": {
+    "GITHUB_PAT": "${localEnv:GITHUB_PAT}",
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
+  }
+}
