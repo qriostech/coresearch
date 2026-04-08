@@ -10,7 +10,7 @@ from core.branch import create_branch
 project = create_project("default", user_id=1)
 print(f"Project created: id={project.id}, root={project.project_root}")
 
-seed = create_seed(project.id, "blackgolem", "https://github.com/FilipAlexander/blackgolem.git")
+seed = create_seed(project.id, "blackgolem", "https://github.com/example/blackgolem.git")
 print(f"Seed created:    id={seed.id}, uuid={seed.uuid}, url={seed.repository_url}")
 
 branch = create_branch(seed.id, "main")

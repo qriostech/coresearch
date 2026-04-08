@@ -12,7 +12,7 @@ from schemas.branch import Branch
 @pytest.fixture()
 def seed():
     s = create_project("branch-test-project")
-    sd = create_seed(s.id, "blackgolem", "https://github.com/FilipAlexander/blackgolem.git")
+    sd = create_seed(s.id, "blackgolem", "https://github.com/example/blackgolem.git")
     branch_ids = []
     yield sd, branch_ids
     with get_cursor() as cur:
