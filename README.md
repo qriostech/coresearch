@@ -11,6 +11,8 @@
 
 **co.research** is an _open-source platform_ designed to enhance collaboration between human researchers and artificial intelligence.
 
+**TLDR; Spin up N agents let them independently explore numerous approaches and steer them efficiently.**
+
 The workflow revolves around optimization experiments. Each experiment is defined in a format similar to autoresearch and is referred to as a **seed**. From a seed, users can create **branches** — independent exploration paths. Within each branch, an agent with a distinct context and harness is initialized to iteratively evolve the codebase with the goal of improving the evaluation score. The user then oversees this multi-branch evolution, steering it toward greater efficiency and superior results.
 
 ## Quick Showcase
