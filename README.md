@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/bb4982fd-7c59-4604-b015-1fd47e686bda
 
 ```bash
 git clone https://github.com/qriostech/coresearch.git
-cd $directory
+cd coresearch
 docker compose up
 ```
 
