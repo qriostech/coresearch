@@ -74,7 +74,7 @@ services:
       context: ./coresearch-front
       dockerfile: Dockerfile
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       API_HOST: controlplane:8000
     volumes:
