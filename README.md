@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/d03f6075-7f74-4d97-a6d2-9f99d99b0d1b
 ## Installation
 
 ```bash
-git clone [{repo_url}](https://github.com/qriostech/coresearch.git)
+git clone https://github.com/qriostech/coresearch.git
 cd $directory
 docker compose up
 ```
