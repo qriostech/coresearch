@@ -18,4 +18,4 @@ build/
 coresearch-core/.pytest_cache/
 ShowCase.mp4
 
-.devcointainer
+.devcontainer
