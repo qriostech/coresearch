@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: coresearch
       POSTGRES_DB: coresearch
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./storage_definition.sql:/docker-entrypoint-initdb.d/storage_definition.sql:ro
@@ -21,8 +21,8 @@ services:
       context: .
       dockerfile: coresearch-core/runner/Dockerfile
     ports:
-      - "8001:8001"
-      - "1455:1455"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:1455:1455"
     environment:
       CONTROLPLANE_URL: http://controlplane:8000
       RUNNER_NAME: runner-1
@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: coresearch-core/controlplane/Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -74,7 +74,7 @@ services:
       context: ./coresearch-front
       dockerfile: Dockerfile
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       API_HOST: controlplane:8000
     volumes:
