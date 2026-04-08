@@ -19,3 +19,4 @@ coresearch-core/.pytest_cache/
 ShowCase.mp4
 
 .devcontainer
+rsync.sh
