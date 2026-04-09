@@ -1,21 +1,10 @@
--- Single source of truth for the database schema.
---
--- Executed by Postgres exactly once, when it initializes an empty data volume
--- (via the docker-entrypoint-initdb.d mount in docker-compose.yaml). Subsequent
--- `docker compose up` runs keep the existing data untouched.
---
--- This is a deliberate pre-Alembic arrangement. While the schema is still moving,
--- the cheap answer is `docker compose down -v && up` to pick up changes. Once
--- the schema stabilizes (or real production installs appear), swap this for
--- Alembic.
-
 CREATE TABLE users (
     id         SERIAL PRIMARY KEY,
     name       TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO users (id, name) VALUES (1, 'root');
+INSERT INTO users (name) VALUES ('root');
 
 CREATE TABLE projects (
     id           SERIAL PRIMARY KEY,
@@ -29,14 +18,8 @@ CREATE TABLE projects (
     project_root TEXT NOT NULL
 );
 
-INSERT INTO projects (id, name, uuid, user_id, project_root)
-VALUES (1, 'default', 'default', 1, '/data/sessions/default');
-
--- The explicit id=1 insert above does not advance the SERIAL sequence, so the
--- next auto-generated insert (e.g. from POST /projects) would collide on id=1.
--- Align the sequence with the current max.
-SELECT setval(pg_get_serial_sequence('projects', 'id'),
-              (SELECT COALESCE(MAX(id), 1) FROM projects));
+INSERT INTO projects (name, uuid, user_id, project_root)
+VALUES ('default', 'default', 1, '/data/sessions/default');
 
 CREATE TABLE runners (
     id             SERIAL PRIMARY KEY,
@@ -82,8 +65,6 @@ CREATE TABLE seeds (
     deleted         BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Default bootstrap seed. commit is empty and lazy-resolved on first branch
--- creation (see post_branch in coresearch-core/controlplane/api.py).
 INSERT INTO seeds (uuid, project_id, name, repository_url, commit)
 VALUES ('default-cdc', 1, 'cdc', 'https://github.com/qriostech/cdchealth', '');
 

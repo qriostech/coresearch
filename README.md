@@ -34,7 +34,7 @@ docker compose up
 4. Go into the session. Invoke the agent (codex and claude are pre-installed) and tell him to start the experiment.
 5. Wait, inspect metrics, visuals, diffs. 
 6. When you like something fork it. It creates a new session where you have the opportunity to let the agent continue the experiment but tweak what are trying to achieve. (tell him to start the experiment but optimize only accept iterations with recall higher than 0.9)
-7. When something looks really good remember to test it out of sample if you are optimizing a problem where it is relevant. (You can optimize some code for execution speed) 
+7. When something looks really good remember to test it out of sample if you are optimizing a problem where it is relevant. (You can optimize some code for execution speed)
 8. Push it to version control.
 
 ## Troubleshooting
