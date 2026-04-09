@@ -5,7 +5,7 @@ from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 from shared.schemas import RenameRunnerRequest
 
-from .branches import branch_columns, build_branch_response
+from controlplane.routers.branches import branch_columns, build_branch_response
 
 router = APIRouter(tags=["runners"])
 

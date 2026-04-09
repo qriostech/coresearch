@@ -12,9 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from shared.middleware import RequestLoggingMiddleware
 
-from . import log
-from .background import stale_runner_check
-from .routers import branches, internal, iterations, projects, runners, seeds, websockets
+from controlplane import log
+from controlplane.background import stale_runner_check
+from controlplane.routers import branches, internal, iterations, projects, runners, seeds, websockets
 
 
 @asynccontextmanager

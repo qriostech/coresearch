@@ -19,7 +19,7 @@ from shared.schemas import (
     WriteFileRequest,
 )
 
-from ..runner_proxy import (
+from controlplane.runner_proxy import (
     any_active_runner_id,
     get_runner_id_for_branch,
     runner_call,

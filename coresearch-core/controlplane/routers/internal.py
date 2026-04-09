@@ -21,8 +21,8 @@ from shared.schemas import (
     RegisterRunnerRequest,
 )
 
-from .. import log
-from ..runner_proxy import get_runner_client
+from controlplane import log
+from controlplane.runner_proxy import get_runner_client
 
 router = APIRouter()
 

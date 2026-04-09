@@ -4,7 +4,7 @@ import asyncio
 from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 
-from . import log
+from controlplane import log
 
 
 async def stale_runner_check():

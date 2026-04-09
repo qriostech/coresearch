@@ -8,8 +8,8 @@ from fastapi import APIRouter, Query, WebSocket
 from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 
-from .. import log
-from ..runner_proxy import get_runner_url
+from controlplane import log
+from controlplane.runner_proxy import get_runner_url
 
 router = APIRouter()
 

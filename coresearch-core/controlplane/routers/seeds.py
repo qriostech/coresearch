@@ -7,12 +7,12 @@ from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 from shared.schemas import CreateSeedRequest, SeedFromIterationRequest
 
-from ..runner_proxy import (
+from controlplane.routers.branches import delete_branch_tree
+from controlplane.runner_proxy import (
     any_active_runner_id,
     get_runner_id_for_branch,
     runner_call,
 )
-from .branches import delete_branch_tree
 
 router = APIRouter(tags=["seeds"])
 

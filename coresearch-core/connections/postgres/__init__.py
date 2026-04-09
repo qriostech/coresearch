@@ -1,1 +1,1 @@
-from .connection import get_cursor
+from connections.postgres.connection import get_cursor

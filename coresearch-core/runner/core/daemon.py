@@ -9,7 +9,7 @@ import httpx
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, DirCreatedEvent
 
-from runner.tmux import is_tmux_alive
+from runner.core.tmux import is_tmux_alive
 from shared.logging import StructuredLogger
 
 LIVENESS_INTERVAL = 10

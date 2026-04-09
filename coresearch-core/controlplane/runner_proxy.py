@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from connections.postgres.connection import get_cursor
 from shared.logging import request_id_var
 
-from . import log
+from controlplane import log
 
 # runner_id -> client / url. Module-private state — never imported elsewhere.
 _runner_clients: dict[int, httpx.Client] = {}

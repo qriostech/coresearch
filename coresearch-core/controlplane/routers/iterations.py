@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from connections.postgres.connection import get_cursor
 from shared.schemas import AddCommentRequest, UpdateIterationRequest
 
-from ..runner_proxy import get_runner_id_for_branch, runner_call
+from controlplane.runner_proxy import get_runner_id_for_branch, runner_call
 
 router = APIRouter(tags=["iterations"])
 
