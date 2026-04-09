@@ -1,5 +1,4 @@
 import json
-import os
 from contextlib import asynccontextmanager
 
 import httpx
@@ -88,168 +87,6 @@ def _get_runner_id_for_branch(branch_id: int) -> int:
     return fallback
 
 
-# --- Migrations ---
-
-def run_migrations():
-    with get_cursor() as cur:
-        # Legacy: rename old sessions -> projects (skip if projects already exists)
-        cur.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'projects') AS exists")
-        projects_exists = cur.fetchone()["exists"]
-        if not projects_exists:
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.columns
-                    WHERE table_name = 'sessions' AND column_name = 'session_root'
-                ) AS exists
-            """)
-            if cur.fetchone()["exists"]:
-                cur.execute("ALTER TABLE sessions RENAME TO projects")
-                cur.execute("ALTER TABLE projects RENAME COLUMN session_root TO project_root")
-                cur.execute("ALTER TABLE seeds RENAME COLUMN session_id TO project_id")
-        cur.execute("ALTER TABLE seeds ADD COLUMN IF NOT EXISTS branch TEXT NOT NULL DEFAULT 'main'")
-        cur.execute("ALTER TABLE seeds ADD COLUMN IF NOT EXISTS commit TEXT NOT NULL DEFAULT ''")
-        cur.execute("ALTER TABLE seeds ADD COLUMN IF NOT EXISTS access_token TEXT")
-        cur.execute("ALTER TABLE branches ADD COLUMN IF NOT EXISTS git_branch TEXT NOT NULL DEFAULT ''")
-        cur.execute("ALTER TABLE branches ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''")
-        cur.execute("ALTER TABLE branches ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE")
-        cur.execute("ALTER TABLE seeds ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE")
-        cur.execute("SELECT id FROM projects LIMIT 1")
-        if cur.fetchone() is None:
-            cur.execute("INSERT INTO projects (name, uuid, user_id, project_root) VALUES ('default', 'default', 1, '/data/sessions/default')")
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS iteration_comments (
-                id           SERIAL PRIMARY KEY,
-                iteration_id INT NOT NULL REFERENCES iterations(id),
-                user_id      INT NOT NULL REFERENCES users(id) DEFAULT 1,
-                body         TEXT NOT NULL,
-                created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-        """)
-        # Create sessions table and migrate data from branches
-        cur.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sessions') AS exists")
-        if not cur.fetchone()["exists"]:
-            cur.execute("""
-                CREATE TABLE sessions (
-                    id             SERIAL PRIMARY KEY,
-                    branch_id      INT NOT NULL UNIQUE REFERENCES branches(id),
-                    runner         TEXT NOT NULL DEFAULT 'tmux',
-                    attach_command TEXT NOT NULL DEFAULT '',
-                    agent          TEXT NOT NULL DEFAULT '',
-                    status         TEXT NOT NULL DEFAULT 'inactive',
-                    started_at     TIMESTAMPTZ,
-                    ended_at       TIMESTAMPTZ,
-                    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-            """)
-            cur.execute("""
-                CREATE TABLE session_history (
-                    id             SERIAL PRIMARY KEY,
-                    session_id     INT NOT NULL REFERENCES sessions(id),
-                    runner         TEXT NOT NULL,
-                    attach_command TEXT NOT NULL,
-                    agent          TEXT NOT NULL,
-                    status         TEXT NOT NULL,
-                    change_type    TEXT NOT NULL,
-                    changed_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-            """)
-            cur.execute("""
-                CREATE OR REPLACE FUNCTION log_session_change() RETURNS TRIGGER AS $$
-                BEGIN
-                    INSERT INTO session_history (session_id, attach_command, runner, agent, status, change_type)
-                    VALUES (NEW.id, NEW.attach_command, NEW.runner, NEW.agent, NEW.status,
-                            CASE WHEN TG_OP = 'INSERT' THEN 'created' ELSE 'updated' END);
-                    RETURN NEW;
-                END;
-                $$ LANGUAGE plpgsql
-            """)
-            cur.execute("""
-                CREATE TRIGGER session_audit
-                AFTER INSERT OR UPDATE ON sessions
-                FOR EACH ROW EXECUTE FUNCTION log_session_change()
-            """)
-            # Migrate existing branch session data (only non-deleted branches)
-            cur.execute("""
-                SELECT id, runner, attach_command, agent, deleted FROM branches
-                WHERE EXISTS (SELECT 1 FROM information_schema.columns
-                              WHERE table_name = 'branches' AND column_name = 'runner')
-            """)
-            for row in cur.fetchall():
-                status = 'inactive' if row["deleted"] else 'active'
-                cur.execute(
-                    """INSERT INTO sessions (branch_id, runner, attach_command, agent, status, started_at)
-                       VALUES (%s, %s, %s, %s, %s, CASE WHEN %s = 'active' THEN now() ELSE NULL END)
-                       ON CONFLICT (branch_id) DO NOTHING""",
-                    (row["id"], row["runner"], row["attach_command"], row["agent"], status, status),
-                )
-            cur.execute("ALTER TABLE branches DROP COLUMN IF EXISTS runner")
-            cur.execute("ALTER TABLE branches DROP COLUMN IF EXISTS attach_command")
-            cur.execute("ALTER TABLE branches DROP COLUMN IF EXISTS agent")
-            cur.execute("DROP TRIGGER IF EXISTS branch_audit ON branches")
-            cur.execute("DROP FUNCTION IF EXISTS log_branch_change()")
-            cur.execute("DROP TABLE IF EXISTS branch_history")
-
-        # --- Runners migration ---
-        cur.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'runners') AS exists")
-        if not cur.fetchone()["exists"]:
-            log.info("creating runners tables")
-            cur.execute("""
-                CREATE TABLE runners (
-                    id             SERIAL PRIMARY KEY,
-                    name           TEXT NOT NULL UNIQUE,
-                    url            TEXT NOT NULL,
-                    status         TEXT NOT NULL DEFAULT 'active',
-                    capabilities   JSONB NOT NULL DEFAULT '{}',
-                    registered_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    last_heartbeat TIMESTAMPTZ
-                )
-            """)
-            cur.execute("""
-                CREATE TABLE runner_history (
-                    id          SERIAL PRIMARY KEY,
-                    runner_id   INT NOT NULL REFERENCES runners(id),
-                    status      TEXT NOT NULL,
-                    change_type TEXT NOT NULL,
-                    changed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-            """)
-            cur.execute("""
-                CREATE OR REPLACE FUNCTION log_runner_change() RETURNS TRIGGER AS $$
-                BEGIN
-                    INSERT INTO runner_history (runner_id, status, change_type)
-                    VALUES (NEW.id, NEW.status,
-                            CASE WHEN TG_OP = 'INSERT' THEN 'registered' ELSE 'updated' END);
-                    RETURN NEW;
-                END;
-                $$ LANGUAGE plpgsql
-            """)
-            cur.execute("""
-                CREATE TRIGGER runner_audit
-                AFTER INSERT OR UPDATE ON runners
-                FOR EACH ROW EXECUTE FUNCTION log_runner_change()
-            """)
-
-        # Add runner_id to branches (nullable initially for migration)
-        cur.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.columns
-                WHERE table_name = 'branches' AND column_name = 'runner_id'
-            ) AS exists
-        """)
-        if not cur.fetchone()["exists"]:
-            log.info("adding runner_id to branches")
-            cur.execute("ALTER TABLE branches ADD COLUMN runner_id INT REFERENCES runners(id)")
-
-        # Drop path from seeds (access_token is kept for branch cloning)
-        cur.execute("ALTER TABLE seeds DROP COLUMN IF EXISTS path")
-        cur.execute("ALTER TABLE seeds ADD COLUMN IF NOT EXISTS access_token TEXT")
-
-        # Add iteration doc columns
-        cur.execute("ALTER TABLE iterations ADD COLUMN IF NOT EXISTS hypothesis TEXT")
-        cur.execute("ALTER TABLE iterations ADD COLUMN IF NOT EXISTS analysis TEXT")
-        cur.execute("ALTER TABLE iterations ADD COLUMN IF NOT EXISTS guidelines_version TEXT")
-
-
 async def _stale_runner_check():
     """Periodically check for runners that missed heartbeats and mark them offline."""
     import asyncio
@@ -282,11 +119,10 @@ async def _stale_runner_check():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
+    del _app  # required by FastAPI lifespan contract but unused
     import asyncio
     log.info("starting controlplane")
-    run_migrations()
-    log.info("migrations complete")
     stale_task = asyncio.create_task(_stale_runner_check())
     yield
     stale_task.cancel()
@@ -590,7 +426,7 @@ def post_branch(seed_id: int, body: CreateBranchRequest):
     if not runner_id:
         raise HTTPException(400, "No runner available")
 
-    # Lazy-resolve empty commit (e.g. default bootstrap seed from storage_definition.sql).
+    # Lazy-resolve empty commit (e.g. default bootstrap seed from run_migrations).
     # Persist the resolved branch/commit so subsequent branches from this seed share the same start state.
     source_branch = seed["branch"]
     source_commit = seed["commit"]
