@@ -13,7 +13,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel
 
 from runner.tmux import create_tmux_session, is_tmux_alive, kill_tmux_session
 from runner.git_ops import (
@@ -23,6 +22,18 @@ from runner.git_ops import (
 from runner.daemon import Daemon
 from shared.logging import StructuredLogger
 from shared.middleware import RequestLoggingMiddleware
+from shared.schemas import (
+    CreateSessionRequest,
+    CreateSessionResponse,
+    InitBranchRequest,
+    InitBranchResponse,
+    PushRequest,
+    ResolveRefRequest,
+    ResolveRefResponse,
+    RunnerWriteFileRequest,
+    SessionAliveResponse,
+    SoftDeleteRequest,
+)
 
 STORAGE_ROOT = os.environ.get("STORAGE_ROOT", "/data/sessions")
 RUNNER_NAME = os.environ.get("RUNNER_NAME", "runner-default")
@@ -153,18 +164,6 @@ def health_check():
 
 # --- Ref resolution ---
 
-class ResolveRefRequest(BaseModel):
-    repository_url: str
-    branch: str | None = None
-    commit: str | None = None
-    access_token: str | None = None
-
-
-class ResolveRefResponse(BaseModel):
-    branch: str
-    commit: str
-
-
 @app.post("/resolve-ref", response_model=ResolveRefResponse)
 def resolve_ref(body: ResolveRefRequest):
     resolved_branch, resolved_commit = resolve_branch_and_commit(
@@ -174,24 +173,6 @@ def resolve_ref(body: ResolveRefRequest):
 
 
 # --- Branch operations ---
-
-class InitBranchRequest(BaseModel):
-    name: str
-    uuid: str
-    repository_url: str
-    source_branch: str
-    source_commit: str
-    access_token: str | None = None
-    source_branch_path: str | None = None  # for forking from existing branch
-
-
-class InitBranchResponse(BaseModel):
-    path: str
-    commit: str
-    git_branch: str
-    attach_command: str
-    sync_command: str
-
 
 @app.post("/init-branch", response_model=InitBranchResponse)
 def init_branch(body: InitBranchRequest):
@@ -224,10 +205,6 @@ def init_branch(body: InitBranchRequest):
 
 # --- Soft delete ---
 
-class SoftDeleteRequest(BaseModel):
-    path: str
-
-
 @app.post("/soft-delete", status_code=204)
 def soft_delete(body: SoftDeleteRequest):
     if not os.path.isdir(body.path):
@@ -242,24 +219,12 @@ def soft_delete(body: SoftDeleteRequest):
 
 # --- Session operations ---
 
-class CreateSessionRequest(BaseModel):
-    working_dir: str
-
-
-class CreateSessionResponse(BaseModel):
-    attach_command: str
-
-
 @app.post("/sessions", response_model=CreateSessionResponse)
 def create_session(body: CreateSessionRequest):
     session_uuid = str(uuid.uuid4())
     attach_command = create_tmux_session(session_uuid, working_dir=body.working_dir)
     log.info("tmux session created", session=session_uuid)
     return CreateSessionResponse(attach_command=attach_command)
-
-
-class SessionAliveResponse(BaseModel):
-    alive: bool
 
 
 @app.get("/sessions/alive")
@@ -291,13 +256,6 @@ def renew_session(working_dir: str = Query(...), old_attach_command: str = Query
 
 
 # --- Git operations ---
-
-class PushRequest(BaseModel):
-    repo_path: str
-    url: str
-    refspec: str
-    access_token: str | None = None
-
 
 @app.post("/git/push")
 def push(body: PushRequest):
@@ -366,14 +324,8 @@ def read_workdir_file(root: str = Query(...), path: str = Query(...)):
         raise HTTPException(400, str(e))
 
 
-class WriteFileRequest(BaseModel):
-    root: str
-    path: str
-    content: str
-
-
 @app.put("/workdir/file", status_code=204)
-def write_workdir_file(body: WriteFileRequest):
+def write_workdir_file(body: RunnerWriteFileRequest):
     full = os.path.realpath(os.path.join(body.root, body.path))
     if not full.startswith(os.path.realpath(body.root)):
         raise HTTPException(400, "Invalid path")
