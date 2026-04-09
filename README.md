@@ -28,8 +28,8 @@ docker compose up
 ```
 
 ## Workflow
-1. Modify your experiment to conform to coresearch [guidelines](https://github.com/qriostech/guidelines/blob/main/coresearch/guidelines/guidelines_v004.md) (try asking agent do it). Alternatively use prepared [experiment](https://github.com/qriostech/cdchealth).
-2. Visit http://127.0.0.1:5173 , click new seed and add the repository details. (You may use https://github.com/qriostech/diabetes to create seed to quickstart)
+1. There is already a default prepared seed with diabetes classification as [experiment](https://github.com/qriostech/cdchealth). When you want to use your experiment modify it to conform to coresearch [guidelines](https://github.com/qriostech/guidelines/blob/main/coresearch/guidelines/guidelines_v004.md) (ask agent to do it) and import it using the new seed button.
+2. Visit http://127.0.0.1:5173 , click new seed and add the repository details. (You may use  to create seed to quickstart)
 3. Create a branch or branches. Session will pop up in the left sidebar. (session is a terminal instance on a runner, right now sessions are created using tmux)
 4. Go into the session. Invoke the agent (codex and claude are pre-installed) and tell him to start the experiment and explain what to optimize. Wait, have a coffee, read a paper.
 5. Inspect metrics, visuals, diffs. 
