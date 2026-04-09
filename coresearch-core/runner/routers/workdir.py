@@ -10,6 +10,22 @@ from shared.schemas import RunnerWriteFileRequest
 router = APIRouter()
 
 
+def _resolve_inside(root: str, path: str) -> str:
+    """Join ``root`` and ``path`` and return the realpath, refusing anything that
+    escapes ``root``. Uses os.path.commonpath rather than startswith because
+    startswith is fooled by sibling directories that share a name prefix
+    (e.g. root=/a/foo path=../foo2 → /a/foo2 which startswith /a/foo)."""
+    root_real = os.path.realpath(root)
+    full = os.path.realpath(os.path.join(root_real, path))
+    try:
+        if os.path.commonpath([full, root_real]) != root_real:
+            raise HTTPException(400, "Invalid path")
+    except ValueError:
+        # commonpath raises if paths are on different drives or otherwise incomparable
+        raise HTTPException(400, "Invalid path")
+    return full
+
+
 @router.get("/workdir/files")
 def list_workdir(root: str = Query(...)):
     if not os.path.isdir(root):
@@ -25,22 +41,20 @@ def list_workdir(root: str = Query(...)):
 
 @router.get("/workdir/file")
 def read_workdir_file(root: str = Query(...), path: str = Query(...)):
-    full = os.path.realpath(os.path.join(root, path))
-    if not full.startswith(os.path.realpath(root)):
-        raise HTTPException(400, "Invalid path")
+    full = _resolve_inside(root, path)
     try:
-        return PlainTextResponse(open(full).read())
+        with open(full) as f:
+            return PlainTextResponse(f.read())
     except Exception as e:
         raise HTTPException(400, str(e))
 
 
 @router.put("/workdir/file", status_code=204)
 def write_workdir_file(body: RunnerWriteFileRequest):
-    full = os.path.realpath(os.path.join(body.root, body.path))
-    if not full.startswith(os.path.realpath(body.root)):
-        raise HTTPException(400, "Invalid path")
+    full = _resolve_inside(body.root, body.path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    open(full, "w").write(body.content)
+    with open(full, "w") as f:
+        f.write(body.content)
 
 
 @router.post("/workdir/commit", status_code=204)

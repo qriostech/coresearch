@@ -41,6 +41,25 @@ def get_runner_url(runner_id: int) -> str:
     return _runner_urls[runner_id]
 
 
+def evict_runner(runner_id: int) -> None:
+    """Drop the cached client and URL for a runner so the next runner_call
+    re-reads the row from the DB. Must be called when:
+      * a runner transitions to offline (stale-heartbeat sweep) — otherwise
+        subsequent calls would skip the explicit 503 and fail with a 120s
+        connection timeout instead.
+      * a runner re-registers (possibly with a new URL) — otherwise the cache
+        keeps pointing at the old URL forever.
+    Safe to call when nothing is cached: a no-op in that case.
+    """
+    client = _runner_clients.pop(runner_id, None)
+    _runner_urls.pop(runner_id, None)
+    if client is not None:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
 def runner_call(runner_id: int, method: str, path: str, **kwargs):
     rid = request_id_var.get()
     headers = kwargs.pop("headers", {})

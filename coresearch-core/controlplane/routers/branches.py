@@ -13,8 +13,11 @@ from fastapi.responses import PlainTextResponse
 from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 from shared.schemas import (
+    Branch,
     CreateBranchRequest,
     ForkBranchRequest,
+    PushResponse,
+    SessionAliveResponse,
     UpdateBranchRequest,
     WriteFileRequest,
 )
@@ -120,7 +123,7 @@ def delete_branch_tree(branch_id: int):
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.get("/seeds/{seed_id}/branches")
+@router.get("/seeds/{seed_id}/branches", response_model=list[Branch])
 def get_branches(seed_id: int):
     with get_cursor() as cur:
         cur.execute(
@@ -157,7 +160,7 @@ def get_branches(seed_id: int):
         return results
 
 
-@router.post("/seeds/{seed_id}/branches", status_code=201)
+@router.post("/seeds/{seed_id}/branches", response_model=Branch, status_code=201)
 def post_branch(seed_id: int, body: CreateBranchRequest):
     with get_cursor() as cur:
         cur.execute("SELECT repository_url, branch, commit, access_token FROM seeds WHERE id = %s AND NOT deleted", (seed_id,))
@@ -238,7 +241,7 @@ def update_branch(branch_id: int, body: UpdateBranchRequest):
             raise HTTPException(404, "Branch not found")
 
 
-@router.post("/branches/{branch_id}/fork", status_code=201)
+@router.post("/branches/{branch_id}/fork", response_model=Branch, status_code=201)
 def fork_branch_endpoint(branch_id: int, req: ForkBranchRequest):
     with get_cursor() as cur:
         cur.execute("SELECT seed_id, path, runner_id FROM branches WHERE id = %s AND NOT deleted", (branch_id,))
@@ -295,7 +298,7 @@ def delete_branch_endpoint(branch_id: int):
 
 # --- Session lifecycle (delegate to runner) ---
 
-@router.get("/branches/{branch_id}/session-alive")
+@router.get("/branches/{branch_id}/session-alive", response_model=SessionAliveResponse)
 def get_session_alive(branch_id: int):
     runner_id = get_runner_id_for_branch(branch_id)
     with get_cursor() as cur:
@@ -307,7 +310,7 @@ def get_session_alive(branch_id: int):
     return resp.json()
 
 
-@router.post("/branches/{branch_id}/renew")
+@router.post("/branches/{branch_id}/renew", response_model=Branch)
 def renew_branch(branch_id: int):
     runner_id = get_runner_id_for_branch(branch_id)
     with get_cursor() as cur:
@@ -359,7 +362,7 @@ def kill_branch(branch_id: int):
 
 # --- Push ---
 
-@router.post("/branches/{branch_id}/push")
+@router.post("/branches/{branch_id}/push", response_model=PushResponse)
 def push_branch(branch_id: int, commit: str | None = Query(None)):
     runner_id = get_runner_id_for_branch(branch_id)
     with get_cursor() as cur:

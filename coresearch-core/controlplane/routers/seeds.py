@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from connections.postgres.connection import get_cursor
 from shared.events import event_bus
-from shared.schemas import CreateSeedRequest, SeedFromIterationRequest
+from shared.schemas import CreateSeedRequest, Seed, SeedFromIterationRequest
 
 from controlplane.routers.branches import delete_branch_tree
 from controlplane.runner_proxy import (
@@ -17,7 +17,7 @@ from controlplane.runner_proxy import (
 router = APIRouter(tags=["seeds"])
 
 
-@router.get("/projects/{project_id}/seeds")
+@router.get("/projects/{project_id}/seeds", response_model=list[Seed])
 def get_seeds(project_id: int):
     with get_cursor() as cur:
         cur.execute(
@@ -28,7 +28,7 @@ def get_seeds(project_id: int):
         return cur.fetchall()
 
 
-@router.post("/projects/{project_id}/seeds", status_code=201)
+@router.post("/projects/{project_id}/seeds", response_model=Seed, status_code=201)
 def post_seed(project_id: int, body: CreateSeedRequest):
     with get_cursor() as cur:
         cur.execute("SELECT id FROM projects WHERE id = %s", (project_id,))
@@ -86,7 +86,7 @@ def delete_seed_endpoint(seed_id: int):
     event_bus.emit("seed.deleted", seed_id=seed_id)
 
 
-@router.post("/projects/{project_id}/seeds/from-iteration", status_code=201)
+@router.post("/projects/{project_id}/seeds/from-iteration", response_model=Seed, status_code=201)
 def seed_from_iteration(project_id: int, body: SeedFromIterationRequest):
     runner_id = get_runner_id_for_branch(body.branch_id)
     with get_cursor() as cur:

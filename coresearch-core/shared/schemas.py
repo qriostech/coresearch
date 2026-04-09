@@ -6,6 +6,9 @@ ResolveRefRequest, InitBranchRequest, ...) describe the runner's HTTP wire forma
 declares its endpoints with the same types. This guarantees the two services
 cannot drift on the request/response shapes they exchange.
 """
+from datetime import datetime
+from typing import Any, Literal
+
 from pydantic import BaseModel
 
 
@@ -169,9 +172,124 @@ class InternalVisualRequest(BaseModel):
 class InternalDocRequest(BaseModel):
     branch_id: int
     hash: str
-    field: str  # "hypothesis", "analysis", "guidelines_version"
+    field: Literal["hypothesis", "analysis", "guidelines_version"]
     content: str
 
 
 class InternalSessionStatusRequest(BaseModel):
     status: str
+
+
+# ---------------------------------------------------------------------------
+# User-facing controlplane response models
+# ---------------------------------------------------------------------------
+
+class Project(BaseModel):
+    id: int
+    name: str
+    uuid: str
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+    llm_provider: str
+    llm_model: str
+    project_root: str
+
+
+class Seed(BaseModel):
+    id: int
+    uuid: str
+    project_id: int
+    name: str
+    repository_url: str
+    branch: str
+    commit: str
+    created_at: datetime
+
+
+class Runner(BaseModel):
+    id: int
+    name: str
+    url: str
+    status: str
+    capabilities: dict[str, Any]
+    registered_at: datetime
+    last_heartbeat: datetime | None
+
+
+class Session(BaseModel):
+    id: int
+    branch_id: int
+    runner: str
+    attach_command: str
+    agent: str
+    status: str
+    started_at: datetime | None
+    ended_at: datetime | None
+    created_at: datetime
+
+
+class Branch(BaseModel):
+    id: int
+    uuid: str
+    seed_id: int
+    runner_id: int | None
+    name: str
+    description: str
+    path: str
+    sync_command: str
+    commit: str
+    git_branch: str
+    created_at: datetime
+    parent_branch_id: int | None
+    parent_iteration_hash: str | None
+    session: Session | None = None
+
+
+class IterationMetric(BaseModel):
+    id: int
+    iteration_id: int
+    key: str
+    value: float
+    recorded_at: datetime
+
+
+class IterationVisual(BaseModel):
+    id: int
+    iteration_id: int
+    filename: str
+    format: str
+    path: str
+    created_at: datetime
+
+
+class IterationComment(BaseModel):
+    id: int
+    iteration_id: int
+    user_id: int
+    user_name: str
+    body: str
+    created_at: datetime
+
+
+class Iteration(BaseModel):
+    id: int
+    branch_id: int
+    hash: str
+    name: str
+    description: str | None
+    hypothesis: str | None
+    analysis: str | None
+    guidelines_version: str | None
+    created_at: datetime
+    metrics: list[IterationMetric]
+    visuals: list[IterationVisual]
+    comments: list[IterationComment]
+
+
+class PushResponse(BaseModel):
+    message: str
+
+
+class CommentCreatedResponse(BaseModel):
+    id: int

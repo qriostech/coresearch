@@ -3,21 +3,21 @@ from fastapi import APIRouter, HTTPException
 
 from connections.postgres.connection import get_cursor
 from shared.events import event_bus
-from shared.schemas import RenameRunnerRequest
+from shared.schemas import Branch, RenameRunnerRequest, Runner
 
 from controlplane.routers.branches import branch_columns, build_branch_response
 
 router = APIRouter(tags=["runners"])
 
 
-@router.get("/runners")
+@router.get("/runners", response_model=list[Runner])
 def get_runners():
     with get_cursor() as cur:
         cur.execute("SELECT id, name, url, status, capabilities, registered_at, last_heartbeat FROM runners ORDER BY id")
         return cur.fetchall()
 
 
-@router.get("/runners/{runner_id}/branches")
+@router.get("/runners/{runner_id}/branches", response_model=list[Branch])
 def get_runner_branches(runner_id: int):
     with get_cursor() as cur:
         cur.execute(

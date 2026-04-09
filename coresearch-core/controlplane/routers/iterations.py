@@ -1,43 +1,88 @@
 """Iteration resource: list, update, comments, visuals."""
+from collections import defaultdict
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from connections.postgres.connection import get_cursor
-from shared.schemas import AddCommentRequest, UpdateIterationRequest
+from shared.schemas import (
+    AddCommentRequest,
+    CommentCreatedResponse,
+    Iteration,
+    UpdateIterationRequest,
+)
 
 from controlplane.runner_proxy import get_runner_id_for_branch, runner_call
 
 router = APIRouter(tags=["iterations"])
 
 
-@router.get("/branches/{branch_id}/iterations")
+def _group_by(rows: list[dict], key: str) -> dict[int, list[dict]]:
+    """Group RealDictCursor rows by a foreign-key column. Order within each
+    group is preserved, so callers can rely on the SQL ORDER BY of the input."""
+    out: dict[int, list[dict]] = defaultdict(list)
+    for row in rows:
+        out[row[key]].append(dict(row))
+    return out
+
+
+@router.get("/branches/{branch_id}/iterations", response_model=list[Iteration])
 def get_iterations(branch_id: int):
     with get_cursor() as cur:
         cur.execute(
-            "SELECT id, branch_id, hash, name, description, hypothesis, analysis, guidelines_version, created_at FROM iterations WHERE branch_id = %s ORDER BY created_at",
+            """SELECT id, branch_id, hash, name, description, hypothesis, analysis,
+                      guidelines_version, created_at
+               FROM iterations
+               WHERE branch_id = %s
+               ORDER BY created_at""",
             (branch_id,),
         )
         iterations = cur.fetchall()
-        result = []
-        for row in iterations:
-            cur.execute(
-                "SELECT id, iteration_id, key, value, recorded_at FROM iteration_metrics WHERE iteration_id = %s ORDER BY key",
-                (row["id"],),
-            )
-            metrics = cur.fetchall()
-            cur.execute(
-                "SELECT id, iteration_id, filename, format, path, created_at FROM iteration_visuals WHERE iteration_id = %s ORDER BY filename",
-                (row["id"],),
-            )
-            visuals = cur.fetchall()
-            cur.execute(
-                """SELECT c.id, c.iteration_id, c.user_id, u.name AS user_name, c.body, c.created_at
-                   FROM iteration_comments c JOIN users u ON u.id = c.user_id
-                   WHERE c.iteration_id = %s ORDER BY c.created_at""",
-                (row["id"],),
-            )
-            comments = cur.fetchall()
-            result.append({**dict(row), "metrics": [dict(m) for m in metrics], "visuals": [dict(v) for v in visuals], "comments": [dict(c) for c in comments]})
+        if not iterations:
+            return []
+
+        iteration_ids = [row["id"] for row in iterations]
+
+        # Three batched queries instead of 3*N. Composite ORDER BY keeps the
+        # per-iteration sort identical to the old per-row queries (key /
+        # filename / created_at).
+        cur.execute(
+            """SELECT id, iteration_id, key, value, recorded_at
+               FROM iteration_metrics
+               WHERE iteration_id = ANY(%s)
+               ORDER BY iteration_id, key""",
+            (iteration_ids,),
+        )
+        metrics_by_iter = _group_by(cur.fetchall(), "iteration_id")
+
+        cur.execute(
+            """SELECT id, iteration_id, filename, format, path, created_at
+               FROM iteration_visuals
+               WHERE iteration_id = ANY(%s)
+               ORDER BY iteration_id, filename""",
+            (iteration_ids,),
+        )
+        visuals_by_iter = _group_by(cur.fetchall(), "iteration_id")
+
+        cur.execute(
+            """SELECT c.id, c.iteration_id, c.user_id, u.name AS user_name, c.body, c.created_at
+               FROM iteration_comments c JOIN users u ON u.id = c.user_id
+               WHERE c.iteration_id = ANY(%s)
+               ORDER BY c.iteration_id, c.created_at""",
+            (iteration_ids,),
+        )
+        comments_by_iter = _group_by(cur.fetchall(), "iteration_id")
+
+    result: list[dict[str, Any]] = []
+    for row in iterations:
+        iter_id = row["id"]
+        result.append({
+            **dict(row),
+            "metrics": metrics_by_iter.get(iter_id, []),
+            "visuals": visuals_by_iter.get(iter_id, []),
+            "comments": comments_by_iter.get(iter_id, []),
+        })
     return result
 
 
@@ -52,7 +97,7 @@ def update_iteration(iteration_id: int, body: UpdateIterationRequest):
             raise HTTPException(404, "Iteration not found")
 
 
-@router.post("/iterations/{iteration_id}/comments", status_code=201)
+@router.post("/iterations/{iteration_id}/comments", response_model=CommentCreatedResponse, status_code=201)
 def add_comment(iteration_id: int, req: AddCommentRequest):
     with get_cursor() as cur:
         cur.execute(

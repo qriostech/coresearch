@@ -4,19 +4,19 @@ import uuid
 from fastapi import APIRouter
 
 from connections.postgres.connection import get_cursor
-from shared.schemas import CreateProjectRequest
+from shared.schemas import CreateProjectRequest, Project
 
 router = APIRouter(tags=["projects"])
 
 
-@router.get("/projects")
+@router.get("/projects", response_model=list[Project])
 def get_projects():
     with get_cursor() as cur:
         cur.execute("SELECT id, name, uuid, user_id, created_at, updated_at, llm_provider, llm_model, project_root FROM projects ORDER BY created_at DESC")
         return cur.fetchall()
 
 
-@router.post("/projects", status_code=201)
+@router.post("/projects", response_model=Project, status_code=201)
 def post_project(body: CreateProjectRequest):
     project_uuid = str(uuid.uuid4())
     with get_cursor() as cur:

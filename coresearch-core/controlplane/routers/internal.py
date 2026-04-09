@@ -22,7 +22,7 @@ from shared.schemas import (
 )
 
 from controlplane import log
-from controlplane.runner_proxy import get_runner_client
+from controlplane.runner_proxy import evict_runner, get_runner_client
 
 router = APIRouter()
 
@@ -46,6 +46,10 @@ def register_runner(body: RegisterRunnerRequest):
             (body.name, body.url, json.dumps(body.capabilities)),
         )
         row = cur.fetchone()
+    # Drop any cached client — on re-registration the URL may have changed,
+    # and even if it hasn't, the previous client may have been built before the
+    # runner went offline.
+    evict_runner(row["id"])
     log.info("runner registered", runner_id=row["id"], runner_name=row["name"], runner_url=row["url"])
     event_bus.emit("runner.registered", runner_id=row["id"], runner_name=row["name"])
     return dict(row)

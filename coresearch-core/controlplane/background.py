@@ -5,6 +5,7 @@ from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 
 from controlplane import log
+from controlplane.runner_proxy import evict_runner
 
 
 async def stale_runner_check():
@@ -23,6 +24,9 @@ async def stale_runner_check():
                 stale = cur.fetchall()
                 for r in stale:
                     log.warn("runner went offline", runner_id=r["id"], runner_name=r["name"])
+                    # Drop the cached httpx client so subsequent calls return 503
+                    # instead of timing out against an unreachable host.
+                    evict_runner(r["id"])
                     event_bus.emit("runner.offline", runner_id=r["id"], runner_name=r["name"])
                     # Mark all active sessions on this runner as dead
                     cur.execute("""
