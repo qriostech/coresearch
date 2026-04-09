@@ -18,13 +18,12 @@ from controlplane.routers import branches, internal, iterations, projects, runne
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
-    del _app  # required by FastAPI lifespan contract but unused
-    log.info("starting controlplane")
+async def lifespan(app: FastAPI):
+    log.info("starting", app=app.title)
     stale_task = asyncio.create_task(stale_runner_check())
     yield
     stale_task.cancel()
-    log.info("shutting down controlplane")
+    log.info("shutting down", app=app.title)
 
 
 app = FastAPI(title="Coresearch Control Plane", lifespan=lifespan)

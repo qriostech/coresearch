@@ -34,7 +34,7 @@ export interface Runner {
 export interface Session {
   id: number
   branch_id: number
-  runner: string
+  kind: string  // session multiplexer kind, e.g. "tmux" (was: runner — collided with branches.runner_id)
   attach_command: string
   agent: string
   status: string
@@ -56,7 +56,8 @@ export interface Branch {
   git_branch: string
   created_at: string
   parent_branch_id: number | null
-  parent_iteration_hash: string | null
+  parent_iteration_id: number | null
+  parent_iteration_hash: string | null  // denormalized via JOIN, kept for layout keying
   session: Session | null
 }
 
@@ -141,8 +142,8 @@ export const api = {
   },
   branches: {
     list: (seed_id: number) => request<Branch[]>('GET', `/seeds/${seed_id}/branches`),
-    create: (seed_id: number, name: string, runner?: string, agent?: string, description?: string, runner_id?: number) =>
-      request<Branch>('POST', `/seeds/${seed_id}/branches`, { name, description, runner, agent, runner_id }),
+    create: (seed_id: number, name: string, kind?: string, agent?: string, description?: string, runner_id?: number) =>
+      request<Branch>('POST', `/seeds/${seed_id}/branches`, { name, description, kind, agent, runner_id }),
     renew: (branch_id: number) => request<Branch>('POST', `/branches/${branch_id}/renew`),
     kill: (branch_id: number) => request<void>('POST', `/branches/${branch_id}/kill`),
     push: (branch_id: number, commit?: string) =>

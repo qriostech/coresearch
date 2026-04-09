@@ -21,16 +21,15 @@ daemon = Daemon()
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
-    del _app  # required by FastAPI lifespan contract but unused
-    log.info("starting runner", storage_root=STORAGE_ROOT, runner_name=RUNNER_NAME)
+async def lifespan(app: FastAPI):
+    log.info("starting", app=app.title, storage_root=STORAGE_ROOT, runner_name=RUNNER_NAME)
     controlplane_url = os.environ.get("CONTROLPLANE_URL", "http://controlplane:8000")
     daemon.start(controlplane_url)
     start_heartbeat(controlplane_url)
     yield
     stop_heartbeat()
     daemon.stop()
-    log.info("runner stopped")
+    log.info("shutting down", app=app.title)
 
 
 app = FastAPI(title="Coresearch Runner", lifespan=lifespan)

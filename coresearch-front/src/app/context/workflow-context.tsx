@@ -13,7 +13,7 @@ interface WorkflowState {
   loading: boolean
   selectProject: (project: Project) => void
   addSeed: (name: string, repository_url: string, branch?: string, commit?: string, access_token?: string) => Promise<Seed>
-  addBranch: (seed_id: number, name: string, runner?: string, agent?: string, description?: string) => Promise<Branch>
+  addBranch: (seed_id: number, name: string, kind?: string, agent?: string, description?: string) => Promise<Branch>
   renewBranch: (seed_id: number, branch_id: number) => Promise<Branch>
   forkBranch: (branch_id: number, seed_id: number, name: string, iteration_hash: string, agent?: string) => Promise<Branch>
   deleteBranch: (seed_id: number, branch_id: number) => Promise<void>
@@ -112,8 +112,8 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     return seed
   }, [currentProject])
 
-  const addBranch = useCallback(async (seed_id: number, name: string, runner?: string, agent?: string, description?: string) => {
-    const branch = await api.branches.create(seed_id, name, runner, agent, description)
+  const addBranch = useCallback(async (seed_id: number, name: string, kind?: string, agent?: string, description?: string) => {
+    const branch = await api.branches.create(seed_id, name, kind, agent, description)
     setBranches((prev) => ({
       ...prev,
       [seed_id]: [...(prev[seed_id] ?? []), branch],

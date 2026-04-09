@@ -40,9 +40,9 @@ class SeedFromIterationRequest(BaseModel):
 class CreateBranchRequest(BaseModel):
     name: str
     description: str = ""
-    runner: str = "tmux"
+    kind: str = "tmux"          # session multiplexer kind (was: runner)
     agent: str = "default"
-    runner_id: int | None = None
+    runner_id: int | None = None  # which runner host to schedule on
 
 
 class UpdateBranchRequest(BaseModel):
@@ -220,7 +220,7 @@ class Runner(BaseModel):
 class Session(BaseModel):
     id: int
     branch_id: int
-    runner: str
+    kind: str  # session multiplexer kind, e.g. "tmux" (was: runner — collided with branches.runner_id naming)
     attach_command: str
     agent: str
     status: str
@@ -241,8 +241,12 @@ class Branch(BaseModel):
     commit: str
     git_branch: str
     created_at: datetime
-    parent_branch_id: int | None
-    parent_iteration_hash: str | None
+    parent_branch_id: int | None = None
+    # parent_iteration_id is the FK; parent_iteration_hash is denormalized via
+    # LEFT JOIN to iterations for convenience (the frontend keys layout nodes
+    # by hash). Both default to None for non-fork branches.
+    parent_iteration_id: int | None = None
+    parent_iteration_hash: str | None = None
     session: Session | None = None
 
 

@@ -81,14 +81,14 @@ CREATE TABLE branches (
     git_branch            TEXT NOT NULL DEFAULT '',
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     parent_branch_id      INT REFERENCES branches(id),
-    parent_iteration_hash TEXT,
+    parent_iteration_id   INT,  -- FK constraint added below, after iterations table is created
     deleted               BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE sessions (
     id             SERIAL PRIMARY KEY,
     branch_id      INT NOT NULL UNIQUE REFERENCES branches(id),
-    runner         TEXT NOT NULL DEFAULT 'tmux',
+    kind           TEXT NOT NULL DEFAULT 'tmux',
     attach_command TEXT NOT NULL DEFAULT '',
     agent          TEXT NOT NULL DEFAULT '',
     status         TEXT NOT NULL DEFAULT 'inactive',
@@ -100,7 +100,7 @@ CREATE TABLE sessions (
 CREATE TABLE session_history (
     id             SERIAL PRIMARY KEY,
     session_id     INT NOT NULL REFERENCES sessions(id),
-    runner         TEXT NOT NULL,
+    kind           TEXT NOT NULL,
     attach_command TEXT NOT NULL,
     agent          TEXT NOT NULL,
     status         TEXT NOT NULL,
@@ -110,8 +110,8 @@ CREATE TABLE session_history (
 
 CREATE FUNCTION log_session_change() RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO session_history (session_id, attach_command, runner, agent, status, change_type)
-    VALUES (NEW.id, NEW.attach_command, NEW.runner, NEW.agent, NEW.status,
+    INSERT INTO session_history (session_id, attach_command, kind, agent, status, change_type)
+    VALUES (NEW.id, NEW.attach_command, NEW.kind, NEW.agent, NEW.status,
             CASE WHEN TG_OP = 'INSERT' THEN 'created' ELSE 'updated' END);
     RETURN NEW;
 END;
@@ -160,3 +160,11 @@ CREATE TABLE iteration_visuals (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (iteration_id, filename)
 );
+
+-- branches.parent_iteration_id is declared above without REFERENCES because
+-- iterations is defined later in this file (and iterations.branch_id references
+-- branches, so a forward FK on either side would be a chicken-and-egg). Add the
+-- FK constraint now that both tables exist.
+ALTER TABLE branches
+    ADD CONSTRAINT branches_parent_iteration_id_fkey
+    FOREIGN KEY (parent_iteration_id) REFERENCES iterations(id);

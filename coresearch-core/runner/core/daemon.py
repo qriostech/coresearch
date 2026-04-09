@@ -9,8 +9,8 @@ import httpx
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, DirCreatedEvent
 
+from runner import log
 from runner.core.tmux import is_tmux_alive
-from shared.logging import StructuredLogger
 
 LIVENESS_INTERVAL = 10
 WATCHER_SYNC_INTERVAL = 30
@@ -19,8 +19,6 @@ FALLBACK_SCAN_INTERVAL = 60
 METRICS_FORMATS = {".json"}
 VISUAL_FORMATS = {".png", ".svg", ".html", ".jpg", ".jpeg", ".gif"}
 ITERATION_DOCS = {"hypothesis.md", "analysis.md", "guidelines_version.txt"}
-
-log = StructuredLogger("runner")
 
 
 class IterationEventHandler(FileSystemEventHandler):
