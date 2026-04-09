@@ -10,8 +10,10 @@
 </p>
 
 Running a coding agent on an ML experiment usually means one agent, one terminal, one direction — and a lot of waiting.
+
 co.research is an open-source platform that addresses this by running agents in parallel and bringing observability to the iteration process.
 Define your experiment as a seed, then branch it and give each branch its own research direction — one tries XGBoost, another logistic regression, another expands the feature set. Each branch's agent iterates toward a better evaluation score while under your supervision. Code diffs, metrics, visual outputs, and other metadata stream into a clean UI as they come in.
+
 Codex and Claude come pre-installed. Bring your own experiment, or start from the included example.
 
 ## Quick Showcase
