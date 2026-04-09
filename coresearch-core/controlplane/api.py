@@ -590,6 +590,25 @@ def post_branch(seed_id: int, body: CreateBranchRequest):
     if not runner_id:
         raise HTTPException(400, "No runner available")
 
+    # Lazy-resolve empty commit (e.g. default bootstrap seed from storage_definition.sql).
+    # Persist the resolved branch/commit so subsequent branches from this seed share the same start state.
+    source_branch = seed["branch"]
+    source_commit = seed["commit"]
+    if not source_commit:
+        resolved = _runner_call(runner_id, "POST", "/resolve-ref", json={
+            "repository_url": seed["repository_url"],
+            "branch": source_branch or None,
+            "commit": None,
+            "access_token": seed.get("access_token"),
+        }).json()
+        source_branch = resolved["branch"]
+        source_commit = resolved["commit"]
+        with get_cursor() as cur:
+            cur.execute(
+                "UPDATE seeds SET branch = %s, commit = %s WHERE id = %s",
+                (source_branch, source_commit, seed_id),
+            )
+
     branch_uuid = str(uuid_mod.uuid4())
 
     # Runner handles clone, checkout, tmux session
@@ -597,8 +616,8 @@ def post_branch(seed_id: int, body: CreateBranchRequest):
         "name": body.name,
         "uuid": branch_uuid,
         "repository_url": seed["repository_url"],
-        "source_branch": seed["branch"],
-        "source_commit": seed["commit"],
+        "source_branch": source_branch,
+        "source_commit": source_commit,
         "access_token": seed.get("access_token"),
     })
     result = resp.json()

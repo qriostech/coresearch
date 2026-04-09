@@ -64,6 +64,11 @@ CREATE TABLE seeds (
     deleted         BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- Default bootstrap seed. commit is left empty and lazy-resolved on first
+-- branch creation (see post_branch in controlplane/api.py).
+INSERT INTO seeds (uuid, project_id, name, repository_url, commit)
+VALUES ('default-cdc', 1, 'cdc', 'https://github.com/qriostech/cdchealth', '');
+
 CREATE TABLE branches (
     id             SERIAL PRIMARY KEY,
     uuid           TEXT NOT NULL UNIQUE,
