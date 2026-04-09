@@ -21,12 +21,12 @@ https://github.com/user-attachments/assets/bb4982fd-7c59-4604-b015-1fd47e686bda
 
 ```bash
 git clone https://github.com/qriostech/coresearch.git
-cd $directory
+cd coresearch
 docker compose up
 ```
 
 ## Workflow
-1. Modify your experiment to conform to coresearch [guidelines](https://github.com/qriostech/guidelines/blob/main/coresearch/guidelines/guidelines_v004.md) (try asking agent do it). Alternatively use prepared [experiment](https://github.com/qriostech/diabetes).
+1. Modify your experiment to conform to coresearch [guidelines](https://github.com/qriostech/guidelines/blob/main/coresearch/guidelines/guidelines_v004.md) (try asking agent do it). Alternatively use prepared [experiment](https://github.com/qriostech/cdchealth).
 2. Visit http://127.0.0.1:5173 , click new seed and add the repository details. (You may use https://github.com/qriostech/diabetes to create seed to quickstart)
 3. Create a branch or branches. Session will pop up in the left sidebar. (session is a terminal instance on a runner, right now sessions are created using tmux)
 4. Go into the session. Invoke the agent (codex and claude are pre-installed) and tell him to start the experiment and explain what to optimize. Wait, have a coffee, read a paper.
@@ -36,6 +36,7 @@ docker compose up
 8. Push it to version control.
 
 ## Troubleshooting
+The repository is very new and there is rapid developmnet. Sometimes full no chache rebuild might be needed.
 ```bash
 docker compose down -v && docker compose build --no-cache && docker compose up -d
 ```
