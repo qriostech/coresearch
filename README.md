@@ -9,9 +9,10 @@
   <a href="https://github.com/qriostech/coresearch/issues"><img src="https://img.shields.io/badge/Contributions-Welcome-orange.svg?style=flat-square" alt="Contributions Welcome"></a>
 </p>
 
-**co.research** is an _open-source platform_ designed to enhance collaboration between human researchers and artificial intelligence.
-
-The workflow revolves around optimization experiments. Each experiment is defined in a format similar to autoresearch and is referred to as a **seed**. From a seed, users can create **branches** — independent exploration paths. Within each branch, an agent with a distinct context and harness is initialized to iteratively evolve the codebase with the goal of improving the evaluation score. The user then oversees this multi-branch evolution, steering it toward greater efficiency and superior results.
+Running a coding agent on an ML experiment usually means one agent, one terminal, one direction — and a lot of waiting.
+co.research is an open-source platform that addresses this by running agents in parallel and bringing observability to the iteration process.
+Define your experiment as a seed, then branch it and give each branch its own research direction — one tries XGBoost, another logistic regression, another expands the feature set. Each branch's agent iterates toward a better evaluation score while under your supervision. Code diffs, metrics, visual outputs, and other metadata stream into a clean UI as they come in.
+Codex and Claude come pre-installed. Bring your own experiment, or start from the included example.
 
 ## Quick Showcase
 https://github.com/user-attachments/assets/bb4982fd-7c59-4604-b015-1fd47e686bda
