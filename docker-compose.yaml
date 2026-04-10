@@ -56,15 +56,40 @@ services:
       POSTGRES_USER: coresearch
       POSTGRES_PASSWORD: coresearch
       RUNNER_URL: http://runner:8001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - ./coresearch-core/controlplane:/app/controlplane
       - ./coresearch-core/connections:/app/connections
       - ./coresearch-core/shared:/app/shared
+      - ./coresearch-core/cory:/app/cory
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/internal/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mcp-postgres:
+    # Reuses the controlplane image — same Python environment, same source tree,
+    # different CMD. The image is built once and shared by docker-compose.
+    build:
+      context: .
+      dockerfile: coresearch-core/controlplane/Dockerfile
+    ports:
+      - "127.0.0.1:8002:8002"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: coresearch
+      POSTGRES_USER: coresearch
+      POSTGRES_PASSWORD: coresearch
+    volumes:
+      - ./coresearch-core/connections:/app/connections
+      - ./coresearch-core/shared:/app/shared
+      - ./coresearch-core/cory:/app/cory
+    command: python -m cory.mcp.postgres
     depends_on:
       postgres:
         condition: service_healthy

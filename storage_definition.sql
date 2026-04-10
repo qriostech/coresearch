@@ -168,3 +168,31 @@ CREATE TABLE iteration_visuals (
 ALTER TABLE branches
     ADD CONSTRAINT branches_parent_iteration_id_fkey
     FOREIGN KEY (parent_iteration_id) REFERENCES iterations(id);
+
+-- ----------------------------------------------------------------------------
+-- cory: postgres role used by the controlplane's cory agent (via the postgres
+-- MCP server at coresearch-core/controlplane/mcp/postgres.py).
+--
+-- Read+write on all current public-schema tables, but no DDL (no CREATE,
+-- DROP, ALTER, TRUNCATE) and no privileges on system catalogs. The
+-- controlplane's main `coresearch` user is granted membership so it can
+-- temporarily assume cory's privileges via SET LOCAL ROLE inside the MCP
+-- tool transaction.
+--
+-- Safety note: cory CAN modify experiment data (branches, seeds, iterations,
+-- comments). Prompt injection in user questions is therefore a real concern —
+-- a hostile question could trick the agent into composing a destructive
+-- UPDATE. The DB role limits damage to "things the controlplane API could
+-- already do" (no DDL, no system table writes), but it does NOT prevent the
+-- agent from e.g. wiping iteration_metrics with an unconstrained DELETE.
+-- Treat the cory chat as semi-trusted code execution.
+-- ----------------------------------------------------------------------------
+
+CREATE ROLE cory;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cory;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO cory;
+
+-- Allow the main controlplane user to switch into the cory role mid-transaction
+-- (used by SET LOCAL ROLE in the MCP server).
+GRANT cory TO coresearch;
