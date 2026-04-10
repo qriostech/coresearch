@@ -43,6 +43,20 @@ export interface Session {
   created_at: string
 }
 
+export interface CorySession {
+  id: number
+  uuid: string
+  user_id: number
+  name: string
+  kind: string
+  attach_command: string
+  agent: string
+  status: string
+  started_at: string | null
+  ended_at: string | null
+  created_at: string
+}
+
 export interface Branch {
   id: number
   uuid: string
@@ -154,6 +168,16 @@ export const api = {
       request<Branch>('POST', `/branches/${branch_id}/fork`, { name, iteration_hash, agent }),
     sessionAlive: (branch_id: number) => request<{ alive: boolean }>('GET', `/branches/${branch_id}/session-alive`),
     delete: (branch_id: number) => request<void>('DELETE', `/branches/${branch_id}`),
+  },
+  corySessions: {
+    list: (user_id?: number) =>
+      request<CorySession[]>('GET', `/cory-sessions${user_id ? `?user_id=${user_id}` : ''}`),
+    create: (name?: string, agent?: string) =>
+      request<CorySession>('POST', '/cory-sessions', { name: name ?? '', agent: agent ?? 'cory' }),
+    kill: (cory_session_id: number) =>
+      request<void>('POST', `/cory-sessions/${cory_session_id}/kill`),
+    delete: (cory_session_id: number) =>
+      request<void>('DELETE', `/cory-sessions/${cory_session_id}`),
   },
   iterations: {
     list: (branch_id: number) => request<Iteration[]>('GET', `/branches/${branch_id}/iterations`),

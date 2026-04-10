@@ -1,11 +1,12 @@
 """Postgres MCP server for the cory agent.
 
-HTTP-based. Runs as its own long-lived docker-compose service (``mcp-postgres``)
-and exposes a streamable-HTTP MCP endpoint at ``/mcp`` on port 8002. Any MCP
+HTTP-based. Runs as its own long-lived docker-compose service (``cory``) and
+exposes a streamable-HTTP MCP endpoint at ``/mcp`` on port 8002. Any MCP
 client can connect:
 
-  - From inside the docker network: ``http://mcp-postgres:8002/mcp``
-    (the cory agent in controlplane, claude in the runner container, etc.)
+  - From inside the docker network: ``http://cory:8002/mcp``
+    (claude/codex running inside the cory container itself, or any other
+    service on the docker-compose network)
   - From the host machine:          ``http://localhost:8002/mcp``
     (a developer's local claude install)
 
@@ -30,7 +31,7 @@ from connections.postgres.connection import get_cursor
 from shared.logging import StructuredLogger
 
 # Distinct service name so cory's log entries are attributable in
-# `docker compose logs mcp-postgres` and don't get confused with controlplane's.
+# `docker compose logs cory` and don't get confused with controlplane's.
 log = StructuredLogger("cory-mcp")
 
 # host/port are keyword-only kwargs on FastMCP.__init__ (NOT on mcp.run()).

@@ -170,6 +170,52 @@ ALTER TABLE branches
     FOREIGN KEY (parent_iteration_id) REFERENCES iterations(id);
 
 -- ----------------------------------------------------------------------------
+-- cory_sessions: tmux sessions belonging directly to a user, hosted inside the
+-- cory container (its own sandbox). Lifecycle is managed by the controlplane,
+-- mirroring the way the controlplane manages branch-scoped sessions on the
+-- runner — except cory_sessions have no branch/seed, just an owner.
+-- ----------------------------------------------------------------------------
+
+CREATE TABLE cory_sessions (
+    id             SERIAL PRIMARY KEY,
+    uuid           TEXT NOT NULL UNIQUE,
+    user_id        INT NOT NULL REFERENCES users(id) DEFAULT 1,
+    name           TEXT NOT NULL DEFAULT '',
+    kind           TEXT NOT NULL DEFAULT 'tmux',
+    attach_command TEXT NOT NULL DEFAULT '',
+    agent          TEXT NOT NULL DEFAULT 'cory',
+    status         TEXT NOT NULL DEFAULT 'inactive',
+    started_at     TIMESTAMPTZ,
+    ended_at       TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted        BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE cory_session_history (
+    id              SERIAL PRIMARY KEY,
+    cory_session_id INT NOT NULL REFERENCES cory_sessions(id),
+    kind            TEXT NOT NULL,
+    attach_command  TEXT NOT NULL,
+    agent           TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    change_type     TEXT NOT NULL,
+    changed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE FUNCTION log_cory_session_change() RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO cory_session_history (cory_session_id, kind, attach_command, agent, status, change_type)
+    VALUES (NEW.id, NEW.kind, NEW.attach_command, NEW.agent, NEW.status,
+            CASE WHEN TG_OP = 'INSERT' THEN 'created' ELSE 'updated' END);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER cory_session_audit
+AFTER INSERT OR UPDATE ON cory_sessions
+FOR EACH ROW EXECUTE FUNCTION log_cory_session_change();
+
+-- ----------------------------------------------------------------------------
 -- cory: postgres role used by the controlplane's cory agent (via the postgres
 -- MCP server at coresearch-core/controlplane/mcp/postgres.py).
 --

@@ -75,6 +75,13 @@ class RenameRunnerRequest(BaseModel):
     name: str
 
 
+class CreateCorySessionRequest(BaseModel):
+    name: str = ""
+    user_id: int = 1
+    agent: str = "cory"
+    kind: str = "tmux"
+
+
 # ---------------------------------------------------------------------------
 # Runner-facing wire schemas (controlplane → runner over HTTP)
 # ---------------------------------------------------------------------------
@@ -221,6 +228,20 @@ class Session(BaseModel):
     id: int
     branch_id: int
     kind: str  # session multiplexer kind, e.g. "tmux" (was: runner — collided with branches.runner_id naming)
+    attach_command: str
+    agent: str
+    status: str
+    started_at: datetime | None
+    ended_at: datetime | None
+    created_at: datetime
+
+
+class CorySession(BaseModel):
+    id: int
+    uuid: str
+    user_id: int
+    name: str
+    kind: str
     attach_command: str
     agent: str
     status: str

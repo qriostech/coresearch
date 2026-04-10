@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react'
-import { api, Project, Seed, Branch, Iteration, Runner } from '../api/client'
+import { api, Project, Seed, Branch, Iteration, Runner, CorySession } from '../api/client'
 import { useCanvasStore } from '../components/canvas-store'
 
 interface WorkflowState {
@@ -10,6 +10,7 @@ interface WorkflowState {
   branches: Record<number, Branch[]>
   iterations: Record<number, Iteration[]>
   aliveBranches: Set<number>
+  corySessions: CorySession[]
   loading: boolean
   selectProject: (project: Project) => void
   addSeed: (name: string, repository_url: string, branch?: string, commit?: string, access_token?: string) => Promise<Seed>
@@ -18,6 +19,9 @@ interface WorkflowState {
   forkBranch: (branch_id: number, seed_id: number, name: string, iteration_hash: string, agent?: string) => Promise<Branch>
   deleteBranch: (seed_id: number, branch_id: number) => Promise<void>
   deleteSeed: (seed_id: number) => Promise<void>
+  addCorySession: (name?: string, agent?: string) => Promise<CorySession>
+  killCorySession: (cory_session_id: number) => Promise<void>
+  deleteCorySession: (cory_session_id: number) => Promise<void>
   seedPositions: Record<number, { x: number; y: number }>
 }
 
@@ -32,6 +36,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [iterations, setIterations] = useState<Record<number, Iteration[]>>({})
   const [loading, setLoading] = useState(true)
   const [aliveBranches, setAliveBranches] = useState<Set<number>>(new Set())
+  const [corySessions, setCorySessions] = useState<CorySession[]>([])
 
   // Compute canvas positions from seed order (memoized to stabilize context value)
   const seedPositions = useMemo(() => {
@@ -87,10 +92,12 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     Promise.all([
       api.projects.list(),
       api.runners.list(),
+      api.corySessions.list(),
     ])
-      .then(async ([projectList, runnerList]) => {
+      .then(async ([projectList, runnerList, coryList]) => {
         setProjects(projectList)
         setRunners(runnerList)
+        setCorySessions(coryList)
         if (projectList.length > 0) {
           await selectProject(projectList[0])
         } else {
@@ -101,6 +108,33 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
         console.error('[coresearch] failed to load:', e)
         setLoading(false)
       })
+  }, [])
+
+  // --- Cory session mutations ---
+
+  const addCorySession = useCallback(async (name?: string, agent?: string) => {
+    const session = await api.corySessions.create(name, agent)
+    setCorySessions(prev => [session, ...prev])
+    return session
+  }, [])
+
+  const killCorySession = useCallback(async (cory_session_id: number) => {
+    await api.corySessions.kill(cory_session_id)
+    setCorySessions(prev => prev.map(s =>
+      s.id === cory_session_id ? { ...s, status: 'killed', ended_at: new Date().toISOString() } : s
+    ))
+  }, [])
+
+  const deleteCorySession = useCallback(async (cory_session_id: number) => {
+    await api.corySessions.delete(cory_session_id)
+    setCorySessions(prev => prev.filter(s => s.id !== cory_session_id))
+  }, [])
+
+  const refreshCorySessions = useCallback(async () => {
+    try {
+      const list = await api.corySessions.list()
+      setCorySessions(list)
+    } catch {}
   }, [])
 
   const addSeed = useCallback(async (name: string, repository_url: string, branch?: string, commit?: string, access_token?: string) => {
@@ -294,6 +328,11 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
           case 'runner.offline':
             api.runners.list().then(setRunners).catch(() => {})
             break
+          case 'cory_session.created':
+          case 'cory_session.status':
+          case 'cory_session.deleted':
+            refreshCorySessions()
+            break
         }
       } catch {}
     }
@@ -307,13 +346,15 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
         ws.close()
       }
     }
-  }, [wsRetry, refreshBranches, refreshIterations])
+  }, [wsRetry, refreshBranches, refreshIterations, refreshCorySessions])
 
   const contextValue = useMemo(() => ({
-    projects, currentProject, runners, seeds, branches, iterations, aliveBranches, loading,
-    selectProject, addSeed, addBranch, renewBranch, forkBranch, deleteBranch, deleteSeed, seedPositions,
-  }), [projects, currentProject, runners, seeds, branches, iterations, aliveBranches, loading,
-    selectProject, addSeed, addBranch, renewBranch, forkBranch, deleteBranch, deleteSeed, seedPositions])
+    projects, currentProject, runners, seeds, branches, iterations, aliveBranches, corySessions, loading,
+    selectProject, addSeed, addBranch, renewBranch, forkBranch, deleteBranch, deleteSeed,
+    addCorySession, killCorySession, deleteCorySession, seedPositions,
+  }), [projects, currentProject, runners, seeds, branches, iterations, aliveBranches, corySessions, loading,
+    selectProject, addSeed, addBranch, renewBranch, forkBranch, deleteBranch, deleteSeed,
+    addCorySession, killCorySession, deleteCorySession, seedPositions])
 
   return (
     <WorkflowContext.Provider value={contextValue}>

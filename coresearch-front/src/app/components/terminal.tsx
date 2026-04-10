@@ -5,11 +5,18 @@ import { init, Terminal, FitAddon } from 'ghostty-web'
 const ghosttyReady = init()
 
 interface Props {
-  branchId: number
+  // Stable identifier used as the React key and as the useEffect dep — the
+  // same id may be reused across kinds (branch 5 vs cory_session 5), but
+  // wsPath disambiguates so this collision is harmless.
+  id: number
+  // Full path under /api, e.g. `/api/ws/branch/5` or `/api/ws/cory-session/5`.
+  // Changing wsPath remounts the websocket; the parent panel rebuilds the
+  // component on attachment changes anyway.
+  wsPath: string
   visible: boolean
 }
 
-export function BranchTerminal({ branchId, visible }: Props) {
+export function WsTerminal({ id: _id, wsPath, visible }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -147,7 +154,7 @@ export function BranchTerminal({ branchId, visible }: Props) {
       termRef.current = term
       fitRef.current = fit
 
-      const ws = new WebSocket(`/api/ws/branch/${branchId}`)
+      const ws = new WebSocket(wsPath)
       ws.binaryType = 'arraybuffer'
       wsRef.current = ws
 
@@ -245,7 +252,7 @@ export function BranchTerminal({ branchId, visible }: Props) {
       cancelled = true
       cleanupRef.current()
     }
-  }, [branchId])
+  }, [wsPath])
 
   // When becoming visible: re-fit after layout settles, focus
   useEffect(() => {

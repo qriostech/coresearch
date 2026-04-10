@@ -9,6 +9,7 @@ from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 
 from controlplane import log
+from controlplane.cory_proxy import CORY_URL
 from controlplane.runner_proxy import get_runner_url
 
 router = APIRouter()
@@ -63,6 +64,64 @@ async def terminal_ws(websocket: WebSocket, branch_id: int):
                     pass
 
             await asyncio.gather(client_to_runner(), runner_to_client())
+    except Exception:
+        await websocket.close(code=1011)
+
+
+@router.websocket("/ws/cory-session/{cory_session_id}")
+async def cory_terminal_ws(websocket: WebSocket, cory_session_id: int):
+    """Proxy a browser terminal connection to the cory container's /ws/terminal.
+
+    Mirrors the branch terminal proxy above (terminal_ws) — looks up the
+    session's attach_command from the DB, then bridges bytes/text both ways
+    between the client websocket and the cory container's websocket. Cory is a
+    single fixed endpoint (CORY_URL env var), so there's no per-session routing
+    table like the runner has.
+    """
+    await websocket.accept()
+
+    def _lookup():
+        with get_cursor() as cur:
+            cur.execute(
+                "SELECT attach_command, status FROM cory_sessions WHERE id = %s AND NOT deleted",
+                (cory_session_id,),
+            )
+            return cur.fetchone()
+
+    row = await asyncio.to_thread(_lookup)
+    if not row or not row["attach_command"]:
+        await websocket.close(code=1008)
+        return
+
+    cory_ws_url = CORY_URL.replace("http://", "ws://").replace("https://", "wss://")
+    cory_uri = f"{cory_ws_url}/ws/terminal?attach_command={quote(row['attach_command'])}"
+
+    try:
+        async with websockets.connect(cory_uri) as cory_ws:
+            async def client_to_cory():
+                while True:
+                    try:
+                        msg = await websocket.receive()
+                        if msg["type"] == "websocket.disconnect":
+                            break
+                        if msg.get("bytes"):
+                            await cory_ws.send(msg["bytes"])
+                        elif msg.get("text"):
+                            await cory_ws.send(msg["text"])
+                    except Exception:
+                        break
+
+            async def cory_to_client():
+                try:
+                    async for msg in cory_ws:
+                        if isinstance(msg, bytes):
+                            await websocket.send_bytes(msg)
+                        else:
+                            await websocket.send_text(msg)
+                except Exception:
+                    pass
+
+            await asyncio.gather(client_to_cory(), cory_to_client())
     except Exception:
         await websocket.close(code=1011)
 

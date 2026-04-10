@@ -72,11 +72,17 @@ interface CanvasStore {
   shiftClickIteration: (iterationId: number, anchorId: number) => void
 
   // Terminal
+  // attachedBranchId and attachedCorySessionId are mutually exclusive — at
+  // most one is non-null at a time. The terminal panel renders whichever is
+  // set, and the setter for either kind clears the other before attaching.
   attachedBranchId: number | null
+  attachedCorySessionId: number | null
   openedTerminals: number[]
+  openedCoryTerminals: number[]
   terminalHeight: number
   terminalResizing: boolean
   setAttachedBranchId: (id: number | null) => void
+  setAttachedCorySessionId: (id: number | null) => void
   setTerminalHeight: (h: number) => void
   setTerminalResizing: (v: boolean) => void
 
@@ -210,29 +216,60 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   // Terminal
   attachedBranchId: null,
+  attachedCorySessionId: null,
   openedTerminals: [],
+  openedCoryTerminals: [],
   terminalHeight: 320,
   terminalResizing: false,
   setAttachedBranchId: (id) => {
-    const prev = get().attachedBranchId
-    // Switching between two terminals: detach first, reattach next frame
-    // so the terminal is fully destroyed and recreated.
-    if (prev !== null && id !== null && prev !== id) {
-      set(s => ({
+    const s = get()
+    const prevBranch = s.attachedBranchId
+    const prevCory = s.attachedCorySessionId
+    // Switching: detach first, reattach next frame so the terminal is fully
+    // destroyed and recreated. Covers both branch→branch and cory→branch.
+    if ((prevBranch !== null || prevCory !== null) && id !== null && prevBranch !== id) {
+      set(st => ({
         attachedBranchId: null,
-        openedTerminals: !s.openedTerminals.includes(id)
-          ? [...s.openedTerminals, id]
-          : s.openedTerminals,
+        attachedCorySessionId: null,
+        openedTerminals: !st.openedTerminals.includes(id)
+          ? [...st.openedTerminals, id]
+          : st.openedTerminals,
       }))
       requestAnimationFrame(() => {
         set({ attachedBranchId: id })
       })
     } else {
-      set(s => ({
+      set(st => ({
         attachedBranchId: id,
-        openedTerminals: id !== null && !s.openedTerminals.includes(id)
-          ? [...s.openedTerminals, id]
-          : s.openedTerminals,
+        attachedCorySessionId: id !== null ? null : st.attachedCorySessionId,
+        openedTerminals: id !== null && !st.openedTerminals.includes(id)
+          ? [...st.openedTerminals, id]
+          : st.openedTerminals,
+      }))
+    }
+  },
+  setAttachedCorySessionId: (id) => {
+    const s = get()
+    const prevBranch = s.attachedBranchId
+    const prevCory = s.attachedCorySessionId
+    if ((prevBranch !== null || prevCory !== null) && id !== null && prevCory !== id) {
+      set(st => ({
+        attachedBranchId: null,
+        attachedCorySessionId: null,
+        openedCoryTerminals: !st.openedCoryTerminals.includes(id)
+          ? [...st.openedCoryTerminals, id]
+          : st.openedCoryTerminals,
+      }))
+      requestAnimationFrame(() => {
+        set({ attachedCorySessionId: id })
+      })
+    } else {
+      set(st => ({
+        attachedCorySessionId: id,
+        attachedBranchId: id !== null ? null : st.attachedBranchId,
+        openedCoryTerminals: id !== null && !st.openedCoryTerminals.includes(id)
+          ? [...st.openedCoryTerminals, id]
+          : st.openedCoryTerminals,
       }))
     }
   },
@@ -297,7 +334,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       activePaneId: 1,
       selectedIterationIds: EMPTY_SET,
       attachedBranchId: null,
+      attachedCorySessionId: null,
       openedTerminals: [],
+      openedCoryTerminals: [],
       lightbox: null,
       diffOverlay: null,
       diffLoading: false,

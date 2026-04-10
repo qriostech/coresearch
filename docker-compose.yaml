@@ -56,12 +56,12 @@ services:
       POSTGRES_USER: coresearch
       POSTGRES_PASSWORD: coresearch
       RUNNER_URL: http://runner:8001
+      CORY_URL: http://cory:8003
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - ./coresearch-core/controlplane:/app/controlplane
       - ./coresearch-core/connections:/app/connections
       - ./coresearch-core/shared:/app/shared
-      - ./coresearch-core/cory:/app/cory
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/internal/health')"]
       interval: 10s
@@ -71,25 +71,27 @@ services:
       postgres:
         condition: service_healthy
 
-  mcp-postgres:
-    # Reuses the controlplane image — same Python environment, same source tree,
-    # different CMD. The image is built once and shared by docker-compose.
+  cory:
+    # Cory's own sandbox: hosts the postgres MCP server and ships the
+    # claude/codex CLIs so the cory agent can run end-to-end inside this
+    # container without touching the controlplane image.
     build:
       context: .
-      dockerfile: coresearch-core/controlplane/Dockerfile
+      dockerfile: coresearch-core/cory/Dockerfile
     ports:
       - "127.0.0.1:8002:8002"
+      - "127.0.0.1:8003:8003"
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: coresearch
       POSTGRES_USER: coresearch
       POSTGRES_PASSWORD: coresearch
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - ./coresearch-core/connections:/app/connections
       - ./coresearch-core/shared:/app/shared
       - ./coresearch-core/cory:/app/cory
-    command: python -m cory.mcp.postgres
     depends_on:
       postgres:
         condition: service_healthy

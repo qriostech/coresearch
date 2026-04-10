@@ -2,7 +2,7 @@
   "mcpServers": {
     "coresearch-postgres": {
       "type": "http",
-      "url": "http://mcp-postgres:8002/mcp"
+      "url": "http://cory:8002/mcp"
     }
   }
 }

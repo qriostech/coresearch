@@ -14,7 +14,7 @@ from shared.middleware import RequestLoggingMiddleware
 
 from controlplane import log
 from controlplane.background import stale_runner_check
-from controlplane.routers import branches, internal, iterations, projects, runners, seeds, websockets
+from controlplane.routers import branches, cory_sessions, internal, iterations, projects, runners, seeds, websockets
 
 
 @asynccontextmanager
@@ -36,5 +36,5 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (runners, projects, seeds, branches, iterations, websockets, internal):
+for module in (runners, projects, seeds, branches, cory_sessions, iterations, websockets, internal):
     app.include_router(module.router)

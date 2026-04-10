@@ -1,15 +1,20 @@
 import { memo, useState, useEffect } from 'react'
-import { FolderGit2, FolderTree, GitBranch, Server, ChevronRight, ChevronDown, Terminal as TerminalIcon, X } from 'lucide-react'
+import { Bot, FolderGit2, FolderTree, GitBranch, Plus, Server, ChevronRight, ChevronDown, Terminal as TerminalIcon, X } from 'lucide-react'
 import { useWorkflow } from '../context/workflow-context'
 import { useCanvasStore } from './canvas-store'
 import { api, Branch } from '../api/client'
 
 export const LeftSidebar = memo(function LeftSidebar() {
-  const { projects, currentProject, selectProject, runners, seeds, branches, iterations, aliveBranches } = useWorkflow()
+  const {
+    projects, currentProject, selectProject, runners, seeds, branches, iterations, aliveBranches,
+    corySessions, addCorySession, killCorySession,
+  } = useWorkflow()
   const selection = useCanvasStore(s => s.getSelection())
   const setSelection = useCanvasStore(s => s.setSelection)
   const attachedBranchId = useCanvasStore(s => s.attachedBranchId)
   const setAttachedBranchId = useCanvasStore(s => s.setAttachedBranchId)
+  const attachedCorySessionId = useCanvasStore(s => s.attachedCorySessionId)
+  const setAttachedCorySessionId = useCanvasStore(s => s.setAttachedCorySessionId)
 
   return (
     <div className="w-64 border-r border-[#30363d] bg-[#161b22] p-4 overflow-y-auto flex flex-col gap-6">
@@ -64,6 +69,67 @@ export const LeftSidebar = memo(function LeftSidebar() {
           ))}
           {seeds.length === 0 && (
             <p className="text-xs text-[#6e7681]">no seeds yet</p>
+          )}
+        </div>
+      </div>
+
+      {/* Cory section */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Bot className="size-4 text-[#58a6ff]" />
+            <h2 className="text-sm text-[#c9d1d9] font-semibold">cory</h2>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                await addCorySession()
+              } catch (e) {
+                console.error('[coresearch] failed to create cory session:', e)
+              }
+            }}
+            className="p-0.5 rounded hover:bg-[#0d1117] text-[#6e7681] hover:text-[#c9d1d9] transition-colors"
+            title="New cory session"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </div>
+        <div className="space-y-1">
+          {corySessions.filter(s => s.status === 'active').map(session => {
+            const isAttached = attachedCorySessionId === session.id
+            return (
+              <div key={session.id}
+                onClick={() => setAttachedCorySessionId(isAttached ? null : session.id)}
+                className={`group px-2 py-1.5 rounded cursor-pointer transition-colors flex items-center gap-2 ${
+                  isAttached
+                    ? 'bg-[#238636]/20 border border-[#238636]'
+                    : 'hover:bg-[#0d1117] border border-transparent hover:border-[#30363d]'
+                }`}>
+                <Bot className={`size-3 shrink-0 ${isAttached ? 'text-[#3fb950]' : 'text-[#6e7681]'}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[#c9d1d9] text-xs truncate">{session.name || `cory-${session.uuid.slice(0, 8)}`}</div>
+                  <div className="text-[#6e7681] text-xs truncate">{session.agent}</div>
+                </div>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    try {
+                      await killCorySession(session.id)
+                      if (attachedCorySessionId === session.id) setAttachedCorySessionId(null)
+                    } catch (err) {
+                      console.error('[coresearch] failed to kill cory session:', err)
+                    }
+                  }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-[#da3633]/20"
+                  title="Kill cory session"
+                >
+                  <X className="size-3 text-[#6e7681] hover:text-[#f85149]" />
+                </button>
+              </div>
+            )
+          })}
+          {corySessions.filter(s => s.status === 'active').length === 0 && (
+            <p className="text-xs text-[#6e7681]">no cory sessions</p>
           )}
         </div>
       </div>

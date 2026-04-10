@@ -1,16 +1,19 @@
 import { memo, useRef, useState, useCallback } from 'react'
-import { Terminal as TerminalIcon, X } from 'lucide-react'
+import { Bot, Terminal as TerminalIcon, X } from 'lucide-react'
 import { useWorkflow } from '../context/workflow-context'
 import { useCanvasStore } from './canvas-store'
-import { BranchTerminal } from './terminal'
+import { WsTerminal } from './terminal'
 
 export const TerminalPanel = memo(function TerminalPanel() {
-  const { branches } = useWorkflow()
+  const { branches, corySessions } = useWorkflow()
   const attachedBranchId = useCanvasStore(s => s.attachedBranchId)
+  const attachedCorySessionId = useCanvasStore(s => s.attachedCorySessionId)
   const openedTerminals = useCanvasStore(s => s.openedTerminals)
+  const openedCoryTerminals = useCanvasStore(s => s.openedCoryTerminals)
   const terminalHeight = useCanvasStore(s => s.terminalHeight)
   const setTerminalHeight = useCanvasStore(s => s.setTerminalHeight)
   const setAttachedBranchId = useCanvasStore(s => s.setAttachedBranchId)
+  const setAttachedCorySessionId = useCanvasStore(s => s.setAttachedCorySessionId)
 
   const [dragging, setDragging] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -49,23 +52,39 @@ export const TerminalPanel = memo(function TerminalPanel() {
 
       // Detach and reattach — this destroys and recreates the terminal
       // at the new dimensions, exactly like the user manually closing
-      // and reopening the panel.
-      const branchId = useCanvasStore.getState().attachedBranchId
-      if (branchId !== null) {
+      // and reopening the panel. Works for both branch and cory sessions.
+      const st = useCanvasStore.getState()
+      if (st.attachedBranchId !== null) {
+        const branchId = st.attachedBranchId
         setAttachedBranchId(null)
-        requestAnimationFrame(() => {
-          setAttachedBranchId(branchId)
-        })
+        requestAnimationFrame(() => setAttachedBranchId(branchId))
+      } else if (st.attachedCorySessionId !== null) {
+        const sessionId = st.attachedCorySessionId
+        setAttachedCorySessionId(null)
+        requestAnimationFrame(() => setAttachedCorySessionId(sessionId))
       }
     }
 
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [setTerminalHeight, setAttachedBranchId])
+  }, [setTerminalHeight, setAttachedBranchId, setAttachedCorySessionId])
 
-  if (attachedBranchId === null) return null
+  if (attachedBranchId === null && attachedCorySessionId === null) return null
 
-  const branchName = Object.values(branches).flat().find(b => b.id === attachedBranchId)?.name ?? String(attachedBranchId)
+  const isCory = attachedCorySessionId !== null
+  const branchName = attachedBranchId !== null
+    ? (Object.values(branches).flat().find(b => b.id === attachedBranchId)?.name ?? String(attachedBranchId))
+    : ''
+  const corySessionName = attachedCorySessionId !== null
+    ? (corySessions.find(s => s.id === attachedCorySessionId)?.name
+       || corySessions.find(s => s.id === attachedCorySessionId)?.uuid.slice(0, 8)
+       || String(attachedCorySessionId))
+    : ''
+
+  const closePanel = () => {
+    if (isCory) setAttachedCorySessionId(null)
+    else setAttachedBranchId(null)
+  }
 
   return (
     <div ref={panelRef} className="border-t border-[#30363d] bg-[#0d1117] flex flex-col" style={{ height: terminalHeight }}>
@@ -77,12 +96,14 @@ export const TerminalPanel = memo(function TerminalPanel() {
       </div>
       <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#30363d]">
         <div className="flex items-center gap-2">
-          <TerminalIcon className="size-4 text-[#58a6ff]" />
+          {isCory
+            ? <Bot className="size-4 text-[#58a6ff]" />
+            : <TerminalIcon className="size-4 text-[#58a6ff]" />}
           <span className="text-xs text-[#8b949e] font-mono">
-            branch terminal — {branchName}
+            {isCory ? `cory session — ${corySessionName}` : `branch terminal — ${branchName}`}
           </span>
         </div>
-        <button onClick={() => setAttachedBranchId(null)}
+        <button onClick={closePanel}
           className="text-[#8b949e] hover:text-[#c9d1d9] transition-colors">
           <X className="size-4" />
         </button>
@@ -94,7 +115,20 @@ export const TerminalPanel = memo(function TerminalPanel() {
           </div>
         )}
         {openedTerminals.map(id => (
-          <BranchTerminal key={id} branchId={id} visible={id === attachedBranchId} />
+          <WsTerminal
+            key={`branch-${id}`}
+            id={id}
+            wsPath={`/api/ws/branch/${id}`}
+            visible={id === attachedBranchId}
+          />
+        ))}
+        {openedCoryTerminals.map(id => (
+          <WsTerminal
+            key={`cory-${id}`}
+            id={id}
+            wsPath={`/api/ws/cory-session/${id}`}
+            visible={id === attachedCorySessionId}
+          />
         ))}
       </div>
     </div>
