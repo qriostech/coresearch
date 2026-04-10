@@ -190,13 +190,26 @@ class InternalSessionStatusRequest(BaseModel):
 class CoryUIEventRequest(BaseModel):
     """UI action emitted by the cory_ui MCP server.
 
-    ``kind`` is the discriminator: 'highlight' and 'unhighlight' require
-    ``iteration_id``; 'clear' carries no other fields. The controlplane just
-    re-emits this onto the event bus as ``cory_ui.{kind}`` — no DB writes.
+    ``kind`` is the discriminator. Field requirements per kind:
+      - highlight          iteration_id (+ optional reason)
+      - unhighlight        iteration_id
+      - clear              (no fields)
+      - suggest_fork       iteration_id, idea, suggestion_id
+      - unsuggest_fork     suggestion_id
+      - clear_suggestions  (no fields)
+
+    The controlplane just re-emits this onto the event bus as
+    ``cory_ui.{kind}`` — no DB writes, no validation against the iterations
+    table. If a kind references stale data the frontend silently ignores it.
     """
-    kind: Literal["highlight", "unhighlight", "clear"]
+    kind: Literal[
+        "highlight", "unhighlight", "clear",
+        "suggest_fork", "unsuggest_fork", "clear_suggestions",
+    ]
     iteration_id: int | None = None
     reason: str = ""
+    suggestion_id: str | None = None
+    idea: str = ""
 
 
 # ---------------------------------------------------------------------------

@@ -219,14 +219,21 @@ def internal_cory_ui_event(body: CoryUIEventRequest):
     Pure event bus, no persistence: this endpoint does not touch the DB. The
     cory_ui MCP server inside the cory container POSTs here once per tool
     call, and we broadcast to all frontend WebSocket clients via the existing
-    /ws/events stream. Highlights live only in frontend canvas-store state
+    /ws/events stream. UI items live only in frontend canvas-store state
     and disappear on reload — that's by design.
+
+    Forwards every non-empty field present in the request so the frontend
+    handler can pick what it needs based on the event kind.
     """
     payload: dict = {}
     if body.iteration_id is not None:
         payload["iteration_id"] = body.iteration_id
     if body.reason:
         payload["reason"] = body.reason
+    if body.suggestion_id is not None:
+        payload["suggestion_id"] = body.suggestion_id
+    if body.idea:
+        payload["idea"] = body.idea
     event_bus.emit(f"cory_ui.{body.kind}", **payload)
     log.info("cory_ui event", kind=body.kind, **payload)
 

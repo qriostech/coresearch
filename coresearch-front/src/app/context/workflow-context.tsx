@@ -346,6 +346,23 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
           case 'cory_ui.clear':
             useCanvasStore.getState().clearIterationHighlights()
             break
+          case 'cory_ui.suggest_fork':
+            if (typeof event.iteration_id === 'number' && typeof event.suggestion_id === 'string') {
+              useCanvasStore.getState().addForkSuggestion(
+                event.suggestion_id,
+                event.iteration_id,
+                event.idea ?? '',
+              )
+            }
+            break
+          case 'cory_ui.unsuggest_fork':
+            if (typeof event.suggestion_id === 'string') {
+              useCanvasStore.getState().removeForkSuggestion(event.suggestion_id)
+            }
+            break
+          case 'cory_ui.clear_suggestions':
+            useCanvasStore.getState().clearForkSuggestions()
+            break
         }
       } catch {}
     }

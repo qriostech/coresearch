@@ -53,19 +53,23 @@ RUN ln -s /app/cory/.mcp.json /app/.mcp.json
 # Create the runtime user, pre-set the claude `--dangerously-skip-permissions`
 # alias, and seed the user-scope claude config so `claude` Just Works from any
 # cwd inside the cory container:
-#   - mcpServers          defines the cory-postgres MCP server at user scope,
-#                         so it's loaded regardless of cwd. (Project-scope
-#                         `.mcp.json` discovery only triggers at a git project
-#                         root, which /home/coresearch is not — that's why
-#                         relying on the symlinked /app/.mcp.json broke for
-#                         tmux sessions started in $HOME.)
-#   - allowedMcpServers   URL-glob trust list that suppresses the "trust this
-#                         MCP server?" prompt on first use, so non-interactive
-#                         `claude -p "..."` works without manual approval.
+#   - hasCompletedOnboarding   skips claude's first-run onboarding flow
+#   - mcpServers               defines both MCP servers at user scope, so they
+#                              load regardless of cwd. (Project-scope `.mcp.json`
+#                              discovery only triggers at a git project root,
+#                              which /home/coresearch is not.)
+#   - allowedMcpServers        URL-glob trust list that suppresses the "trust
+#                              this MCP server?" prompt on first use.
+#   - projects.<path>.hasTrustDialogAccepted  pre-accepts the workspace trust
+#                              dialog ("Do you trust the files in this folder?")
+#                              for the dirs cory tmux sessions actually run in.
+#                              `--dangerously-skip-permissions` covers tool
+#                              prompts but NOT this trust dialog — they're
+#                              separate gates.
 RUN useradd -m -s /bin/bash coresearch && \
     echo 'alias claude="claude --dangerously-skip-permissions"' >> /home/coresearch/.bashrc && \
     echo 'set -g status off' > /home/coresearch/.tmux.conf && \
-    printf '%s\n' '{"mcpServers":{"coresearch-postgres":{"type":"http","url":"http://cory:8002/mcp"},"coresearch-ui":{"type":"http","url":"http://cory:8004/mcp"}},"allowedMcpServers":[{"serverUrl":"http://cory:8002/*"},{"serverUrl":"http://cory:8004/*"}]}' > /home/coresearch/.claude.json && \
+    printf '%s\n' '{"hasCompletedOnboarding":true,"mcpServers":{"coresearch-postgres":{"type":"http","url":"http://cory:8002/mcp"},"coresearch-ui":{"type":"http","url":"http://cory:8004/mcp"}},"allowedMcpServers":[{"serverUrl":"http://cory:8002/*"},{"serverUrl":"http://cory:8004/*"}],"projects":{"/home/coresearch":{"hasTrustDialogAccepted":true},"/app":{"hasTrustDialogAccepted":true}}}' > /home/coresearch/.claude.json && \
     chown -R coresearch:coresearch /app /home/coresearch
 
 USER coresearch

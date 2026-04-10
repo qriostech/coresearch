@@ -23,8 +23,30 @@ RUN case "$TARGETARCH" in \
 
 RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
+# Trust-dialog bypass helper. Branch tmux sessions cd into dynamic per-branch
+# dirs under /data/sessions/<uuid>/..., so we can't pre-populate the claude
+# `projects` map at build time the way the cory image does. Instead, the
+# `claude` bash function below primes the current cwd lazily on every
+# invocation by calling this script before launching real claude. The script
+# is idempotent — re-running for an already-trusted dir is a no-op write.
+COPY coresearch-core/scripts/claude-trust-cwd.py /usr/local/bin/claude-trust-cwd
+RUN chmod 0755 /usr/local/bin/claude-trust-cwd
+
+# Create the runtime user, install the claude wrapper function, and silence
+# tmux's status bar. The function:
+#   - calls claude-trust-cwd "$(pwd)" to mark the current dir as trusted in
+#     ~/.claude.json (suppresses the "do you trust this folder?" prompt)
+#   - then invokes the real claude binary with --dangerously-skip-permissions
+#     (using `command` to bypass the function and avoid infinite recursion)
+# `--dangerously-skip-permissions` covers per-tool prompts; the trust dialog
+# is a separate gate handled by the script.
 RUN useradd -m -s /bin/bash coresearch && \
-    echo 'alias claude="claude --dangerously-skip-permissions"' >> /home/coresearch/.bashrc && \
+    printf '%s\n' \
+      'claude() {' \
+      '  /usr/local/bin/claude-trust-cwd "$(pwd)" 2>/dev/null || true' \
+      '  command claude --dangerously-skip-permissions "$@"' \
+      '}' \
+      >> /home/coresearch/.bashrc && \
     echo 'set -g status off' > /home/coresearch/.tmux.conf
 
 WORKDIR /app

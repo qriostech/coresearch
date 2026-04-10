@@ -367,6 +367,10 @@ export function CanvasSVG() {
     if (!el) return
 
     const onDown = (e: MouseEvent) => {
+      // Skip mousedowns originating inside an HUD overlay (cory pills, etc.)
+      // — otherwise dragging to select text inside a pill would engage the
+      // canvas pan and move the underlying graph.
+      if ((e.target as HTMLElement).closest('[data-canvas-hud]')) return
       if (e.target === el || (e.target as HTMLElement).closest('.canvas-bg')) {
         isPanningRef.current = true
         lastMouseRef.current = { x: e.clientX, y: e.clientY }
@@ -824,10 +828,16 @@ export function CanvasSVG() {
         </g>
       </svg>
 
-      {/* HUD pill — outside the SVG so it stays in viewport coordinates,
-          unaffected by pan/zoom. Renders nothing when there are no active
-          highlights. */}
-      <CoryHighlightsPill />
+      {/* HUD pills stack — outside the SVG so they stay in viewport
+          coordinates, unaffected by pan/zoom. Each pill renders nothing
+          when its corresponding state is empty, so the stack adapts.
+          data-canvas-hud tells the canvas pan handler to ignore mousedowns
+          originating here so users can select / copy text from the pills
+          without dragging the underlying graph. */}
+      <div data-canvas-hud className="absolute top-3 right-3 z-20 flex flex-col gap-2">
+        <CoryHighlightsPill />
+        <CoryForkSuggestionsPill />
+      </div>
     </div>
   )
 }
@@ -938,41 +948,179 @@ const CoryHighlightsPill = memo(function CoryHighlightsPill() {
   const entries = Array.from(highlights.entries())
 
   return (
-    <div className="absolute top-3 right-3 z-20">
-      <div className="bg-[#161b22]/95 backdrop-blur-sm border border-[#f0883e]/60 rounded-md shadow-lg overflow-hidden">
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#f0d59a] hover:bg-[#0d1117]/60 transition-colors w-full"
-          title="Cory highlights"
-        >
-          <span className="size-2 rounded-full bg-[#f0883e] animate-pulse" />
-          <span>cory highlights ({highlights.size})</span>
-          <span className="text-[#6e7681]">{expanded ? '▾' : '▸'}</span>
-        </button>
-        {expanded && (
-          <div className="border-t border-[#30363d] max-h-64 overflow-y-auto">
-            {entries.map(([iterId, reason]) => (
-              <div key={iterId}
-                onClick={() => handleClickEntry(iterId)}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#c9d1d9] hover:bg-[#0d1117]/60 border-b border-[#21262d] last:border-b-0 cursor-pointer">
-                <span className="text-[#6e7681] shrink-0">#{iterId}</span>
-                <span className="flex-1 truncate">{reason || <span className="text-[#6e7681] italic">no reason</span>}</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeIterationHighlight(iterId) }}
-                  className="text-[#6e7681] hover:text-[#f85149] transition-colors shrink-0"
-                  title="Dismiss"
-                >×</button>
-              </div>
-            ))}
-            <div className="px-3 py-1.5 border-t border-[#30363d] bg-[#0d1117]/40">
+    <div className="bg-[#161b22]/95 backdrop-blur-sm border border-[#f0883e]/60 rounded-md shadow-lg overflow-hidden w-72">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#f0d59a] hover:bg-[#0d1117]/60 transition-colors w-full"
+        title="Cory highlights"
+      >
+        <span className="size-2 rounded-full bg-[#f0883e] animate-pulse" />
+        <span>cory highlights ({highlights.size})</span>
+        <span className="text-[#6e7681]">{expanded ? '▾' : '▸'}</span>
+      </button>
+      {expanded && (
+        <div className="border-t border-[#30363d] max-h-64 overflow-y-auto">
+          {entries.map(([iterId, reason]) => (
+            <div key={iterId}
+              onClick={() => handleClickEntry(iterId)}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#c9d1d9] hover:bg-[#0d1117]/60 border-b border-[#21262d] last:border-b-0 cursor-pointer">
+              <span className="text-[#6e7681] shrink-0">#{iterId}</span>
+              <span className="flex-1 truncate">{reason || <span className="text-[#6e7681] italic">no reason</span>}</span>
               <button
-                onClick={() => clearIterationHighlights()}
-                className="text-xs font-mono text-[#f85149] hover:text-[#ff6a69] transition-colors"
-              >clear all</button>
+                onClick={(e) => { e.stopPropagation(); removeIterationHighlight(iterId) }}
+                className="text-[#6e7681] hover:text-[#f85149] transition-colors shrink-0"
+                title="Dismiss"
+              >×</button>
             </div>
+          ))}
+          <div className="px-3 py-1.5 border-t border-[#30363d] bg-[#0d1117]/40">
+            <button
+              onClick={() => clearIterationHighlights()}
+              className="text-xs font-mono text-[#f85149] hover:text-[#ff6a69] transition-colors"
+            >clear all</button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  )
+})
+
+// ---------------------------------------------------------------------------
+// CoryForkSuggestionsPill — second HUD pill, stacked below the highlights
+// pill. Each entry shows the source iteration's short hash + cory's idea
+// text. Clicking "fork" looks up the iteration's branch + seed, sets the
+// canvas selection (so the existing fork dialog reads the source from it),
+// pre-fills the fork name with a slug derived from the idea, and opens the
+// dialog. Clicking elsewhere on the entry just selects + pans to the source
+// iteration without opening the dialog. Dismiss × removes the suggestion
+// without acting on it.
+// ---------------------------------------------------------------------------
+
+// Turn cory's free-text idea into a tame branch name. Lowercase, alphanums
+// and dashes only. Cap at 24 chars and truncate at the last word boundary
+// before the limit so we don't end up with a half-word like "deeper-net" → ok
+// but "try-a-deeper-netw" → "try-a-deeper". Falls back to "cory-fork" if the
+// input is empty after sanitizing.
+function ideaToBranchName(idea: string): string {
+  const MAX = 24
+  let slug = idea
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  if (slug.length > MAX) {
+    const cut = slug.slice(0, MAX)
+    const lastDash = cut.lastIndexOf('-')
+    slug = lastDash > 8 ? cut.slice(0, lastDash) : cut.replace(/-+$/, '')
+  }
+  return slug || 'cory-fork'
+}
+
+const CoryForkSuggestionsPill = memo(function CoryForkSuggestionsPill() {
+  const { iterations, branches } = useWorkflow()
+  const suggestions = useCanvasStore(s => s.suggestedForks)
+  const removeForkSuggestion = useCanvasStore(s => s.removeForkSuggestion)
+  const clearForkSuggestions = useCanvasStore(s => s.clearForkSuggestions)
+  const setSelection = useCanvasStore(s => s.setSelection)
+  const setPanTargetIteration = useCanvasStore(s => s.setPanTargetIteration)
+  const setForkDialog = useCanvasStore(s => s.setForkDialog)
+  const setForkName = useCanvasStore(s => s.setForkName)
+  const setForkAgent = useCanvasStore(s => s.setForkAgent)
+  const [expanded, setExpanded] = useState(true)
+
+  if (suggestions.size === 0) return null
+
+  // iter_id → {branchId, hash, seedId}. Same shape as the highlights pill's
+  // resolver — kept local since the two pills don't share lookups.
+  const resolveIteration = (iterId: number): { seedId: number; branchId: number; iterationHash: string } | null => {
+    for (const [branchIdStr, iters] of Object.entries(iterations)) {
+      const branchId = Number(branchIdStr)
+      const iter = iters.find(it => it.id === iterId)
+      if (!iter) continue
+      for (const bs of Object.values(branches)) {
+        const branch = bs.find(b => b.id === branchId)
+        if (branch) return { seedId: branch.seed_id, branchId, iterationHash: iter.hash }
+      }
+      return null
+    }
+    return null
+  }
+
+  const handleSelectEntry = (iterId: number) => {
+    const ref = resolveIteration(iterId)
+    if (!ref) return
+    setSelection({ type: 'iteration', seedId: ref.seedId, branchId: ref.branchId, iterationId: iterId })
+    setPanTargetIteration({ branchId: ref.branchId, iterationHash: ref.iterationHash })
+  }
+
+  const handleFork = (iterId: number, idea: string) => {
+    const ref = resolveIteration(iterId)
+    if (!ref) return
+    // The fork dialog reads the source iteration from the current canvas
+    // selection, so we set selection first, then prime the form fields,
+    // then flip the dialog open.
+    setSelection({ type: 'iteration', seedId: ref.seedId, branchId: ref.branchId, iterationId: iterId })
+    setForkName(ideaToBranchName(idea))
+    setForkAgent('default')
+    setForkDialog(true)
+  }
+
+  const entries = Array.from(suggestions.entries())
+
+  return (
+    <div className="bg-[#161b22]/95 backdrop-blur-sm border border-[#a371f7]/60 rounded-md shadow-lg overflow-hidden w-72">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#d2a8ff] hover:bg-[#0d1117]/60 transition-colors w-full"
+        title="Cory fork suggestions"
+      >
+        <span className="size-2 rounded-full bg-[#a371f7] animate-pulse" />
+        <span>cory suggestions ({suggestions.size})</span>
+        <span className="text-[#6e7681]">{expanded ? '▾' : '▸'}</span>
+      </button>
+      {expanded && (
+        <div className="border-t border-[#30363d] max-h-80 overflow-y-auto">
+          {entries.map(([sid, { iteration_id, idea }]) => {
+            const ref = resolveIteration(iteration_id)
+            const shortHash = ref ? ref.iterationHash.slice(0, 8) : `#${iteration_id}`
+            return (
+              <div key={sid}
+                className="px-3 py-2 text-xs font-mono text-[#c9d1d9] hover:bg-[#0d1117]/40 border-b border-[#21262d] last:border-b-0">
+                <div
+                  onClick={() => handleSelectEntry(iteration_id)}
+                  className="flex items-center gap-2 cursor-pointer mb-1.5"
+                  title="Select & pan to source iteration"
+                >
+                  <span className="text-[#a371f7] shrink-0">⑂</span>
+                  <span className="text-[#8b949e] shrink-0">from</span>
+                  <span className="text-[#c9d1d9] truncate">{shortHash}</span>
+                </div>
+                <div className="text-[#c9d1d9] mb-2 whitespace-normal break-words leading-snug">
+                  {idea || <span className="text-[#6e7681] italic">no idea text</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleFork(iteration_id, idea)}
+                    disabled={!ref}
+                    className="px-2 py-0.5 rounded bg-[#a371f7]/15 border border-[#a371f7]/50 text-[#d2a8ff] hover:bg-[#a371f7]/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={ref ? 'Open fork dialog with this iteration' : 'Source iteration not found'}
+                  >fork</button>
+                  <button
+                    onClick={() => removeForkSuggestion(sid)}
+                    className="px-2 py-0.5 rounded text-[#6e7681] hover:text-[#f85149] hover:bg-[#da3633]/10 transition-colors"
+                    title="Dismiss suggestion"
+                  >dismiss</button>
+                </div>
+              </div>
+            )
+          })}
+          <div className="px-3 py-1.5 border-t border-[#30363d] bg-[#0d1117]/40">
+            <button
+              onClick={() => clearForkSuggestions()}
+              className="text-xs font-mono text-[#f85149] hover:text-[#ff6a69] transition-colors"
+            >clear all</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 })

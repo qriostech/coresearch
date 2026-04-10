@@ -24,6 +24,7 @@ one extra port and one extra entry in ``~/.claude.json``.
 """
 import json
 import os
+import uuid
 from typing import Any
 
 import httpx
@@ -167,9 +168,94 @@ async def clear_highlights() -> str:
     Use this between distinct topics in a conversation, or when the user
     explicitly asks you to start fresh. There is no undo — if you wipe
     highlights you wanted to keep, you'll need to re-emit them.
+
+    Note: this only clears highlights, not fork suggestions. Use
+    ``clear_suggestions`` for those.
     """
     log.info("clear_highlights")
     return json.dumps(await _emit({"kind": "clear"}))
+
+
+# --- Fork suggestions ---------------------------------------------------------
+#
+# Suggestions are a richer attention channel than highlights: they pair an
+# iteration (the source) with an idea (what to try next). They surface in the
+# frontend as a separate "cory suggestions" pill — clicking an entry pre-fills
+# the existing fork dialog so the user can review and submit. The suggestion
+# itself does NOT create a fork on its own; the user always has the final say.
+
+@mcp.tool()
+async def suggest_fork(iteration_id: int, idea: str) -> str:
+    """Suggest that the user fork from a specific iteration to explore an idea.
+
+    Use this whenever you've identified a promising direction the experiment
+    hasn't tried yet. The suggestion appears in a sidebar pill on the user's
+    canvas with the iteration hash and your ``idea`` text; the user can click
+    "fork" to open the fork dialog pre-populated with the iteration and a
+    name derived from your idea, or dismiss the suggestion entirely.
+
+    Suggestions are ephemeral (lost on page reload) and do NOT modify the
+    database. They're a hint to the user, not a commitment — the user always
+    decides whether to actually create the fork.
+
+    Args:
+        iteration_id: The ``iterations.id`` to fork FROM. Look it up via the
+            postgres MCP server if you only have a hash.
+        idea: A short description of what the fork should explore. One or two
+            sentences is ideal — this is what the user sees when deciding
+            whether to act on the suggestion. Examples: "Try a deeper network
+            with dropout 0.3 to see if the overfitting at iter 12 was about
+            capacity." / "Switch to focal loss to handle the class imbalance
+            we observed in the metrics."
+
+    Returns:
+        JSON ``{"ok": true, "suggestion_id": "..."}`` on success. Save the
+        ``suggestion_id`` if you might want to retract it later via
+        ``unsuggest_fork``. On failure: ``{"ok": false, "error": "..."}``.
+    """
+    suggestion_id = str(uuid.uuid4())
+    log.info("suggest_fork", iteration_id=iteration_id, suggestion_id=suggestion_id, idea=idea)
+    result = await _emit({
+        "kind": "suggest_fork",
+        "iteration_id": iteration_id,
+        "idea": idea,
+        "suggestion_id": suggestion_id,
+    })
+    if result.get("ok"):
+        result["suggestion_id"] = suggestion_id
+    return json.dumps(result)
+
+
+@mcp.tool()
+async def unsuggest_fork(suggestion_id: str) -> str:
+    """Retract a specific fork suggestion.
+
+    Use when you've changed your mind about a suggestion you made earlier in
+    the conversation, or when the user has implicitly addressed it by doing
+    something else. Pass the ``suggestion_id`` returned from the original
+    ``suggest_fork`` call.
+
+    Args:
+        suggestion_id: The UUID returned by ``suggest_fork``. No-op if the
+            suggestion was already dismissed by the user or never existed.
+    """
+    log.info("unsuggest_fork", suggestion_id=suggestion_id)
+    return json.dumps(await _emit({
+        "kind": "unsuggest_fork",
+        "suggestion_id": suggestion_id,
+    }))
+
+
+@mcp.tool()
+async def clear_suggestions() -> str:
+    """Remove ALL active fork suggestions from the user's canvas.
+
+    Use between distinct conversation topics or when the user explicitly
+    asks for a clean slate. Only clears suggestions — highlights are
+    unaffected. Use ``clear_highlights`` for those.
+    """
+    log.info("clear_suggestions")
+    return json.dumps(await _emit({"kind": "clear_suggestions"}))
 
 
 def main():

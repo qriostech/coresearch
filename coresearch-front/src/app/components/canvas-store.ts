@@ -93,6 +93,15 @@ interface CanvasStore {
   removeIterationHighlight: (iteration_id: number) => void
   clearIterationHighlights: () => void
 
+  // Cory fork suggestions — same ephemeral, broadcast pattern. Keyed by a
+  // server-generated UUID so multiple suggestions can target the same
+  // iteration without collision. Each entry pairs an iteration with an idea
+  // (free text) for the user to consider exploring via fork.
+  suggestedForks: Map<string, { iteration_id: number; idea: string }>
+  addForkSuggestion: (suggestion_id: string, iteration_id: number, idea: string) => void
+  removeForkSuggestion: (suggestion_id: string) => void
+  clearForkSuggestions: () => void
+
   // Pan target — branch ID to center the canvas on (consumed & cleared by CanvasSVG)
   panTarget: number | null
   setPanTarget: (id: number | null) => void
@@ -310,6 +319,24 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     return { highlightedIterations: new Map() }
   }),
 
+  // Cory fork suggestions — same Map-immutability pattern as highlights.
+  suggestedForks: new Map<string, { iteration_id: number; idea: string }>(),
+  addForkSuggestion: (suggestion_id, iteration_id, idea) => set(s => {
+    const next = new Map(s.suggestedForks)
+    next.set(suggestion_id, { iteration_id, idea })
+    return { suggestedForks: next }
+  }),
+  removeForkSuggestion: (suggestion_id) => set(s => {
+    if (!s.suggestedForks.has(suggestion_id)) return s
+    const next = new Map(s.suggestedForks)
+    next.delete(suggestion_id)
+    return { suggestedForks: next }
+  }),
+  clearForkSuggestions: () => set(s => {
+    if (s.suggestedForks.size === 0) return s
+    return { suggestedForks: new Map() }
+  }),
+
   // Pan target
   panTarget: null, setPanTarget: (id) => set({ panTarget: id }),
   panTargetIteration: null, setPanTargetIteration: (target) => set({ panTargetIteration: target }),
@@ -373,6 +400,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       openedTerminals: [],
       openedCoryTerminals: [],
       highlightedIterations: new Map(),
+      suggestedForks: new Map(),
       lightbox: null,
       diffOverlay: null,
       diffLoading: false,
