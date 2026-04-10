@@ -187,6 +187,18 @@ class InternalSessionStatusRequest(BaseModel):
     status: str
 
 
+class CoryUIEventRequest(BaseModel):
+    """UI action emitted by the cory_ui MCP server.
+
+    ``kind`` is the discriminator: 'highlight' and 'unhighlight' require
+    ``iteration_id``; 'clear' carries no other fields. The controlplane just
+    re-emits this onto the event bus as ``cory_ui.{kind}`` — no DB writes.
+    """
+    kind: Literal["highlight", "unhighlight", "clear"]
+    iteration_id: int | None = None
+    reason: str = ""
+
+
 # ---------------------------------------------------------------------------
 # User-facing controlplane response models
 # ---------------------------------------------------------------------------

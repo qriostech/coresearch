@@ -65,15 +65,18 @@ RUN ln -s /app/cory/.mcp.json /app/.mcp.json
 RUN useradd -m -s /bin/bash coresearch && \
     echo 'alias claude="claude --dangerously-skip-permissions"' >> /home/coresearch/.bashrc && \
     echo 'set -g status off' > /home/coresearch/.tmux.conf && \
-    printf '%s\n' '{"mcpServers":{"coresearch-postgres":{"type":"http","url":"http://cory:8002/mcp"}},"allowedMcpServers":[{"serverUrl":"http://cory:8002/*"}]}' > /home/coresearch/.claude.json && \
+    printf '%s\n' '{"mcpServers":{"coresearch-postgres":{"type":"http","url":"http://cory:8002/mcp"},"coresearch-ui":{"type":"http","url":"http://cory:8004/mcp"}},"allowedMcpServers":[{"serverUrl":"http://cory:8002/*"},{"serverUrl":"http://cory:8004/*"}]}' > /home/coresearch/.claude.json && \
     chown -R coresearch:coresearch /app /home/coresearch
 
 USER coresearch
 
-# Run both the postgres MCP server (port 8002) and the cory session API
-# (port 8003) in one container. The MCP server is backgrounded and the API
-# uvicorn process runs in the foreground so it owns PID 1's signal handling
-# (graceful shutdown of the API on `docker compose down`). Acceptable trade-off
-# for dev: a hard kill of the MCP child if uvicorn exits abnormally is fine
-# because docker-compose restarts the whole container anyway.
-CMD ["bash", "-c", "python -m cory.mcp.postgres & exec uvicorn cory.api:app --host 0.0.0.0 --port 8003 --reload"]
+# Three processes share this container:
+#   - cory.mcp.postgres   port 8002 — postgres MCP server (read+write SQL)
+#   - cory.api            port 8003 — session lifecycle HTTP API
+#   - cory.mcp.cory_ui    port 8004 — UI action MCP server (highlights, etc.)
+# The two MCP servers are backgrounded and the session API uvicorn runs in
+# the foreground so it owns PID 1's signal handling (graceful shutdown of
+# the API on `docker compose down`). Hard kill of the backgrounded children
+# on uvicorn exit is acceptable for dev — docker-compose restarts the whole
+# container anyway.
+CMD ["bash", "-c", "python -m cory.mcp.postgres & python -m cory.mcp.cory_ui & exec uvicorn cory.api:app --host 0.0.0.0 --port 8003 --reload"]

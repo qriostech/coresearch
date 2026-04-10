@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from connections.postgres.connection import get_cursor
 from shared.events import event_bus
 from shared.schemas import (
+    CoryUIEventRequest,
     InternalDocRequest,
     InternalIterationRequest,
     InternalMetricsRequest,
@@ -207,6 +208,27 @@ def internal_upsert_doc(body: InternalDocRequest):
             (body.content, body.branch_id, body.hash),
         )
     event_bus.emit("iteration.doc", branch_id=body.branch_id, hash=body.hash, field=body.field)
+
+
+# --- Cory UI action channel (called by cory.mcp.cory_ui) ---
+
+@router.post("/internal/cory/ui-event", status_code=204)
+def internal_cory_ui_event(body: CoryUIEventRequest):
+    """Re-emit a cory UI action onto the event bus.
+
+    Pure event bus, no persistence: this endpoint does not touch the DB. The
+    cory_ui MCP server inside the cory container POSTs here once per tool
+    call, and we broadcast to all frontend WebSocket clients via the existing
+    /ws/events stream. Highlights live only in frontend canvas-store state
+    and disappear on reload — that's by design.
+    """
+    payload: dict = {}
+    if body.iteration_id is not None:
+        payload["iteration_id"] = body.iteration_id
+    if body.reason:
+        payload["reason"] = body.reason
+    event_bus.emit(f"cory_ui.{body.kind}", **payload)
+    log.info("cory_ui event", kind=body.kind, **payload)
 
 
 @router.patch("/internal/sessions/{session_id}/status", status_code=204)

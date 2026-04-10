@@ -81,12 +81,14 @@ services:
     ports:
       - "127.0.0.1:8002:8002"
       - "127.0.0.1:8003:8003"
+      - "127.0.0.1:8004:8004"
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: coresearch
       POSTGRES_USER: coresearch
       POSTGRES_PASSWORD: coresearch
+      CONTROLPLANE_URL: http://controlplane:8000
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - ./coresearch-core/connections:/app/connections

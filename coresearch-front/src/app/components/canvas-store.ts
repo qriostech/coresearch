@@ -86,9 +86,24 @@ interface CanvasStore {
   setTerminalHeight: (h: number) => void
   setTerminalResizing: (v: boolean) => void
 
+  // Cory UI highlights — ephemeral, broadcast over WS by the cory_ui MCP
+  // server. Map iteration_id → reason chip text. Lost on reload by design.
+  highlightedIterations: Map<number, string>
+  addIterationHighlight: (iteration_id: number, reason: string) => void
+  removeIterationHighlight: (iteration_id: number) => void
+  clearIterationHighlights: () => void
+
   // Pan target — branch ID to center the canvas on (consumed & cleared by CanvasSVG)
   panTarget: number | null
   setPanTarget: (id: number | null) => void
+
+  // Pan target keyed by a specific iteration (branchId + hash). Set when the
+  // user wants to navigate to one iteration node, e.g. clicking an entry in
+  // the cory highlights pill. Consumed & cleared by CanvasSVG, just like
+  // panTarget. Lives as a parallel field rather than a union on panTarget so
+  // existing branch-only callers don't change shape.
+  panTargetIteration: { branchId: number; iterationHash: string } | null
+  setPanTargetIteration: (target: { branchId: number; iterationHash: string } | null) => void
 
   // Seed pan target — seed ID to center the canvas on after creation
   seedPanTarget: number | null
@@ -276,8 +291,28 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setTerminalHeight: (h) => set({ terminalHeight: h }),
   setTerminalResizing: (v) => set({ terminalResizing: v }),
 
+  // Cory UI highlights — see interface comment. Each mutation returns a new
+  // Map so React/Zustand selectors notice the change.
+  highlightedIterations: new Map<number, string>(),
+  addIterationHighlight: (iteration_id, reason) => set(s => {
+    const next = new Map(s.highlightedIterations)
+    next.set(iteration_id, reason)
+    return { highlightedIterations: next }
+  }),
+  removeIterationHighlight: (iteration_id) => set(s => {
+    if (!s.highlightedIterations.has(iteration_id)) return s
+    const next = new Map(s.highlightedIterations)
+    next.delete(iteration_id)
+    return { highlightedIterations: next }
+  }),
+  clearIterationHighlights: () => set(s => {
+    if (s.highlightedIterations.size === 0) return s
+    return { highlightedIterations: new Map() }
+  }),
+
   // Pan target
   panTarget: null, setPanTarget: (id) => set({ panTarget: id }),
+  panTargetIteration: null, setPanTargetIteration: (target) => set({ panTargetIteration: target }),
   seedPanTarget: null, setSeedPanTarget: (id) => set({ seedPanTarget: id }),
 
   // Dialogs
@@ -337,6 +372,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       attachedCorySessionId: null,
       openedTerminals: [],
       openedCoryTerminals: [],
+      highlightedIterations: new Map(),
       lightbox: null,
       diffOverlay: null,
       diffLoading: false,

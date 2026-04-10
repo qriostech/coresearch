@@ -155,6 +155,15 @@ function ensureHighlightStyles() {
     /* Iteration selected */
     [data-iter-id].iter-selected > [data-role="iter-dot"] { fill: #388bfd; stroke: #58a6ff; r: 8; }
     [data-iter-id].iter-selected > [data-role="iter-label"] { fill: #58a6ff; }
+    /* Cory highlights — pulsing amber halo on the iteration dot.
+       Applied via .iter-cory-highlight class toggled by a store subscription. */
+    @keyframes cory-pulse {
+      0%, 100% { stroke: #f0883e; stroke-width: 3; r: 9; }
+      50%      { stroke: #ffd58a; stroke-width: 4.5; r: 11; }
+    }
+    [data-iter-id].iter-cory-highlight > [data-role="iter-dot"] {
+      animation: cory-pulse 1.6s ease-in-out infinite;
+    }
   `
   document.head.appendChild(style)
 }
@@ -304,6 +313,50 @@ export function CanvasSVG() {
       setVisibleBranches(next)
     }
   }, [computeVisibleBranches])
+
+  // ---------------------------------------------------------------------------
+  // Cory highlight class toggling — same DOM-mutation pattern as the selection
+  // effect above. Re-runs whenever visibleBranches changes too, because
+  // iteration nodes are virtualized: a highlighted iter on a currently
+  // off-screen branch has no DOM element until the user pans to it, at which
+  // point we need to re-apply the class to the freshly-mounted node.
+  // Must live AFTER visibleBranches is declared to avoid TDZ.
+  // ---------------------------------------------------------------------------
+  const prevHighlightsRef = useRef<Map<number, string>>(new Map())
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+
+    const applyHighlights = (next: Map<number, string>) => {
+      const prev = prevHighlightsRef.current
+      // Drop the class from any iter no longer in the set
+      prev.forEach((_, id) => {
+        if (!next.has(id)) {
+          const el = svg.querySelector(`[data-iter-id="${id}"]`)
+          if (el) el.classList.remove('iter-cory-highlight')
+        }
+      })
+      // Apply the class to every iter currently in the set. We do this for
+      // ALL ids (not just newly-added) so re-renders from virtualization pick
+      // up the class on freshly-mounted nodes.
+      next.forEach((_, id) => {
+        const el = svg.querySelector(`[data-iter-id="${id}"]`)
+        if (el && !el.classList.contains('iter-cory-highlight')) {
+          el.classList.add('iter-cory-highlight')
+        }
+      })
+      prevHighlightsRef.current = next
+    }
+
+    applyHighlights(useCanvasStore.getState().highlightedIterations)
+
+    const unsub = useCanvasStore.subscribe((state) => {
+      if (state.highlightedIterations === prevHighlightsRef.current) return
+      applyHighlights(state.highlightedIterations)
+    })
+
+    return unsub
+  }, [visibleBranches])
 
 
   // ---------------------------------------------------------------------------
@@ -644,6 +697,44 @@ export function CanvasSVG() {
     setPan(newPan)
   }, [layout, viewportSize, applyTransform, setPan])
 
+  // ---------------------------------------------------------------------------
+  // Pan-to-iteration: when panTargetIteration is set (e.g. user clicked an
+  // entry in the cory highlights pill), center on the specific iteration node
+  // — not the branch top — so a deeply-nested iteration in a long chain ends
+  // up actually visible. Mirrors the pan-to-branch effect above.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const unsub = useCanvasStore.subscribe((state, prev) => {
+      const target = state.panTargetIteration
+      if (target === null || target === prev.panTargetIteration) return
+      useCanvasStore.getState().setPanTargetIteration(null)
+
+      const pos = layoutRef.current[`iter:${target.branchId}:${target.iterationHash}`]
+      if (!pos) return
+
+      const z = Math.min(zoomRef.current, 0.90)
+      zoomRef.current = z
+
+      const newPan = {
+        x: viewportSize.w / 2 - pos.x * z,
+        y: viewportSize.h / 2 - pos.y * z,
+      }
+      panRef.current = newPan
+      applyTransform()
+      setPan(newPan)
+      setZoom(z)
+
+      // Re-apply selection highlight after the newly visible nodes mount
+      requestAnimationFrame(() => {
+        const svg = svgRef.current
+        if (!svg) return
+        const s = useCanvasStore.getState()
+        applySelectionHighlight(svg, s.getSelection(), s.selectedIterationIds)
+      })
+    })
+    return unsub
+  }, [viewportSize, applyTransform, setPan, setZoom])
+
   // Pre-compute metric ranges per branch (O(n) instead of O(n²) per iteration)
   const metricRanges = useMemo(() => {
     const ranges: Record<number, MetricRange> = {}
@@ -726,11 +817,165 @@ export function CanvasSVG() {
               </g>
             )
           })}
+
+          {/* Cory highlight chips — rendered inside the panned/zoomed group
+              so they stay anchored to their iteration nodes. */}
+          <CoryHighlightChips iterations={iterations} layout={layout} />
         </g>
       </svg>
+
+      {/* HUD pill — outside the SVG so it stays in viewport coordinates,
+          unaffected by pan/zoom. Renders nothing when there are no active
+          highlights. */}
+      <CoryHighlightsPill />
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// CoryHighlightChips — one chip per active highlight, rendered inside the
+// panned SVG group so chips track their iteration node when the user pans.
+// ---------------------------------------------------------------------------
+const CoryHighlightChips = memo(function CoryHighlightChips({
+  iterations,
+  layout,
+}: {
+  iterations: Record<number, Iteration[]>
+  layout: Record<string, { x: number; y: number }>
+}) {
+  const highlights = useCanvasStore(s => s.highlightedIterations)
+  const removeIterationHighlight = useCanvasStore(s => s.removeIterationHighlight)
+
+  // Build iter_id → { branchId, hash } once per render so we can resolve
+  // positions via the layout map.
+  const iterIndex = useMemo(() => {
+    const idx = new Map<number, { branchId: number; hash: string }>()
+    for (const [bidStr, iters] of Object.entries(iterations)) {
+      const branchId = Number(bidStr)
+      for (const it of iters) idx.set(it.id, { branchId, hash: it.hash })
+    }
+    return idx
+  }, [iterations])
+
+  if (highlights.size === 0) return null
+
+  const chips: React.ReactElement[] = []
+  highlights.forEach((reason, iterId) => {
+    const ref = iterIndex.get(iterId)
+    if (!ref) return
+    const pos = layout[`iter:${ref.branchId}:${ref.hash}`]
+    if (!pos) return
+
+    const text = reason || 'cory'
+    // Crude width estimate: ~6.5 px per char + 18 px padding + close button.
+    const w = Math.max(40, Math.min(220, text.length * 6.5 + 28))
+    const x = pos.x + 14
+    const y = pos.y - 20  // above the iter dot
+    chips.push(
+      <g key={`chip-${iterId}`} data-cory-chip-iter={iterId}>
+        <rect x={x} y={y} width={w} height={18} rx={9}
+          fill="#3a2a10" stroke="#f0883e" strokeWidth={1.25} />
+        <text x={x + 9} y={y + 13} fill="#f0d59a" fontSize="11"
+          className="select-none font-mono pointer-events-none">
+          {text.length > 30 ? text.slice(0, 28) + '…' : text}
+        </text>
+        <circle cx={x + w - 9} cy={y + 9} r={7}
+          fill="transparent" className="cursor-pointer"
+          onClick={(e) => { e.stopPropagation(); removeIterationHighlight(iterId) }} />
+        <text x={x + w - 9} y={y + 13} fill="#f0d59a" fontSize="11"
+          textAnchor="middle"
+          className="select-none font-mono pointer-events-none">×</text>
+      </g>
+    )
+  })
+
+  return <>{chips}</>
+})
+
+// ---------------------------------------------------------------------------
+// CoryHighlightsPill — fixed-position HUD over the canvas. Shows the count
+// of active highlights and lets the user clear them all at once. Clicking
+// an individual entry selects that iteration and pans the canvas to it.
+// (Cory creating highlights does NOT auto-pan — only the explicit user
+// click in this pill triggers navigation.)
+// ---------------------------------------------------------------------------
+const CoryHighlightsPill = memo(function CoryHighlightsPill() {
+  const { iterations, branches } = useWorkflow()
+  const highlights = useCanvasStore(s => s.highlightedIterations)
+  const removeIterationHighlight = useCanvasStore(s => s.removeIterationHighlight)
+  const clearIterationHighlights = useCanvasStore(s => s.clearIterationHighlights)
+  const setSelection = useCanvasStore(s => s.setSelection)
+  const setPanTargetIteration = useCanvasStore(s => s.setPanTargetIteration)
+  const [expanded, setExpanded] = useState(false)
+
+  if (highlights.size === 0) return null
+
+  // Find {branchId, iterationHash, seedId} for an iteration_id by walking
+  // the workflow context's iterations + branches maps. Returns null if the
+  // iteration was deleted (or never existed). O(n) per click — fine for a
+  // user-driven action.
+  const resolveIteration = (iterId: number): { seedId: number; branchId: number; iterationHash: string } | null => {
+    for (const [branchIdStr, iters] of Object.entries(iterations)) {
+      const branchId = Number(branchIdStr)
+      const iter = iters.find(it => it.id === iterId)
+      if (!iter) continue
+      for (const bs of Object.values(branches)) {
+        const branch = bs.find(b => b.id === branchId)
+        if (branch) return { seedId: branch.seed_id, branchId, iterationHash: iter.hash }
+      }
+      return null
+    }
+    return null
+  }
+
+  const handleClickEntry = (iterId: number) => {
+    const ref = resolveIteration(iterId)
+    if (!ref) return
+    setSelection({ type: 'iteration', seedId: ref.seedId, branchId: ref.branchId, iterationId: iterId })
+    setPanTargetIteration({ branchId: ref.branchId, iterationHash: ref.iterationHash })
+  }
+
+  const entries = Array.from(highlights.entries())
+
+  return (
+    <div className="absolute top-3 right-3 z-20">
+      <div className="bg-[#161b22]/95 backdrop-blur-sm border border-[#f0883e]/60 rounded-md shadow-lg overflow-hidden">
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#f0d59a] hover:bg-[#0d1117]/60 transition-colors w-full"
+          title="Cory highlights"
+        >
+          <span className="size-2 rounded-full bg-[#f0883e] animate-pulse" />
+          <span>cory highlights ({highlights.size})</span>
+          <span className="text-[#6e7681]">{expanded ? '▾' : '▸'}</span>
+        </button>
+        {expanded && (
+          <div className="border-t border-[#30363d] max-h-64 overflow-y-auto">
+            {entries.map(([iterId, reason]) => (
+              <div key={iterId}
+                onClick={() => handleClickEntry(iterId)}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-[#c9d1d9] hover:bg-[#0d1117]/60 border-b border-[#21262d] last:border-b-0 cursor-pointer">
+                <span className="text-[#6e7681] shrink-0">#{iterId}</span>
+                <span className="flex-1 truncate">{reason || <span className="text-[#6e7681] italic">no reason</span>}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeIterationHighlight(iterId) }}
+                  className="text-[#6e7681] hover:text-[#f85149] transition-colors shrink-0"
+                  title="Dismiss"
+                >×</button>
+              </div>
+            ))}
+            <div className="px-3 py-1.5 border-t border-[#30363d] bg-[#0d1117]/40">
+              <button
+                onClick={() => clearIterationHighlights()}
+                className="text-xs font-mono text-[#f85149] hover:text-[#ff6a69] transition-colors"
+              >clear all</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
 
 // ---------------------------------------------------------------------------
 // applySelectionHighlight — toggles CSS classes on SVG elements directly

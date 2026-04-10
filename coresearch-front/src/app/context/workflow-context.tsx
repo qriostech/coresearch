@@ -333,6 +333,19 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
           case 'cory_session.deleted':
             refreshCorySessions()
             break
+          case 'cory_ui.highlight':
+            if (typeof event.iteration_id === 'number') {
+              useCanvasStore.getState().addIterationHighlight(event.iteration_id, event.reason ?? '')
+            }
+            break
+          case 'cory_ui.unhighlight':
+            if (typeof event.iteration_id === 'number') {
+              useCanvasStore.getState().removeIterationHighlight(event.iteration_id)
+            }
+            break
+          case 'cory_ui.clear':
+            useCanvasStore.getState().clearIterationHighlights()
+            break
         }
       } catch {}
     }
